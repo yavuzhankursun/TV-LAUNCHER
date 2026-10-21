@@ -127,6 +127,15 @@
             android:taskAffinity=".mirror"
             android:theme="@style/Theme.Sade" />
 
+        <!-- Yeni AirPlay gönderenine "İzin ver / Reddet" sorusu -->
+        <activity
+            android:name=".airplay.ConsentActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=".consent"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

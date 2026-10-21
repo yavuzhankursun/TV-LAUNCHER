@@ -153,6 +153,9 @@ object MirrorHub : VideoSink {
     private var width = 0
     private var height = 0
     private val early = ArrayList<ByteArray>()
+    private var earlyBytes = 0
+    /** Erken kare tamponunun üst sınırı (bozuk/kötü niyetli akış belleği doldurmasın). */
+    private const val MAX_EARLY_BYTES = 8 * 1024 * 1024
 
     @Volatile var onVideoSize: ((Int, Int) -> Unit)? = null
     @Volatile var onFirstFrame: (() -> Unit)? = null
@@ -162,7 +165,7 @@ object MirrorHub : VideoSink {
         synchronized(lock) {
             val sizeChanged = width != this.width || height != this.height
             this.sps = sps; this.pps = pps; this.width = width; this.height = height
-            early.clear()
+            early.clear(); earlyBytes = 0
             val d = decoder
             if (d != null && sizeChanged && !d.adaptive) {
                 // Döndürme: uyarlanamayan çözücü yeni boyutla baştan kurulur.
@@ -179,7 +182,11 @@ object MirrorHub : VideoSink {
     override fun onFrame(data: ByteArray, length: Int, sequenceHeader: Boolean) {
         val d = synchronized(lock) {
             decoder ?: run {
-                if (sps != null && early.size < 240) early += data.copyOf(length)
+                // Ekran açılana kadar biriken kareler: adet ve toplam boyutla sınırlı (bellek taşmasın).
+                if (sps != null && early.size < 240 && earlyBytes + length <= MAX_EARLY_BYTES) {
+                    early += data.copyOf(length)
+                    earlyBytes += length
+                }
                 null
             }
         } ?: return
@@ -211,7 +218,7 @@ object MirrorHub : VideoSink {
             decoder?.release()
             decoder = null
             sps = null; pps = null; width = 0; height = 0
-            early.clear()
+            early.clear(); earlyBytes = 0
         }
     }
 
@@ -228,6 +235,6 @@ object MirrorHub : VideoSink {
         decoder = d
         // Ekran açılmadan önce gelen kareleri sırayla ver (ilk anahtar kare burada).
         for (f in early) d.feed(f, 0, f.size, false)
-        early.clear()
+        early.clear(); earlyBytes = 0
     }
 }

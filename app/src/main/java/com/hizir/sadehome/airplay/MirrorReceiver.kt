@@ -23,11 +23,13 @@ import javax.crypto.spec.SecretKeySpec
 class MirrorReceiver(
     aesKey: ByteArray,
     streamConnectionId: Long,
+    /** Sadece RTSP'ye bağlanan cihazdan gelen akış kabul edilir. */
+    private val peer: java.net.InetAddress,
     private val sink: VideoSink,
     private val log: (String) -> Unit,
     private val onEnd: () -> Unit,
 ) {
-    private val server = ServerSocket(0)
+    private val server = ServerSocket(0).apply { soTimeout = ACCEPT_TIMEOUT_MS }
     val port: Int get() = server.localPort
     @Volatile private var running = true
     @Volatile private var socket: Socket? = null
@@ -51,7 +53,12 @@ class MirrorReceiver(
 
     private fun run() {
         try {
-            val s = server.accept()
+            var s = server.accept()
+            while (s.inetAddress != peer) {
+                log("Görüntü portuna yabancı bağlantı reddedildi: ${s.inetAddress.hostAddress}")
+                runCatching { s.close() }
+                s = server.accept()
+            }
             socket = s
             s.tcpNoDelay = true
             s.receiveBufferSize = 1 shl 20
@@ -62,6 +69,9 @@ class MirrorReceiver(
             log("Görüntü akışı kapandı")
         } catch (e: IOException) {
             if (running) log("Görüntü akışı hatası: ${e.message}")
+        } catch (t: Throwable) {
+            // OutOfMemoryError vb. ağ iş parçacığını öldürüp tüm süreci (ana ekranı) çökertmesin.
+            log("Görüntü akışı durdu: $t")
         } finally {
             close()
             onEnd()
@@ -77,7 +87,7 @@ class MirrorReceiver(
         while (running) {
             input.readFully(header)
             val size = hb.getInt(0)
-            if (size < 0 || size > 32 * 1024 * 1024) throw IOException("Geçersiz paket boyu: $size")
+            if (size < 0 || size > MAX_PACKET) throw IOException("Geçersiz paket boyu: $size")
             if (payload.size < size) payload = ByteArray(maxOf(size, payload.size * 2))
             input.readFully(payload, 0, size)
             lastPacketAt = System.currentTimeMillis()
@@ -113,6 +123,10 @@ class MirrorReceiver(
                     val pps = payload.copyOfRange(ppsAt, ppsAt + ppsLen)
                     val w = hb.getFloat(56).toInt().takeIf { it > 0 } ?: hb.getFloat(40).toInt()
                     val h = hb.getFloat(60).toInt().takeIf { it > 0 } ?: hb.getFloat(44).toInt()
+                    if (w !in 0..MAX_DIM || h !in 0..MAX_DIM) {
+                        log("Desteklenmeyen görüntü boyutu ${w}x$h")
+                        continue
+                    }
                     sink.onCodec(sps, pps, w, h)
                     sequenceHeader = true
                 }
@@ -145,6 +159,11 @@ class MirrorReceiver(
     }
 
     companion object {
+        /** 1080p bir anahtar kare pratikte 1 MB'ın altında; 4 MB bol pay, 2 GB'lık kutuda güvenli. */
+        private const val MAX_PACKET = 4 * 1024 * 1024
+        private const val MAX_DIM = 4096
+        private const val ACCEPT_TIMEOUT_MS = 15_000
+
         fun sha512(a: ByteArray, b: ByteArray): ByteArray {
             val md = MessageDigest.getInstance("SHA-512")
             md.update(a)

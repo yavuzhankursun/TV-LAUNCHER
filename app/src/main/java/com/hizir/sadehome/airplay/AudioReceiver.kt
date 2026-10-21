@@ -16,6 +16,8 @@ class AudioReceiver(
     private val aesKey: ByteArray,
     private val aesIv: ByteArray,
     val ct: Int,
+    /** Sadece RTSP'ye bağlanan cihazdan gelen ses paketleri kabul edilir. */
+    private val peer: java.net.InetAddress,
     private val sink: AudioSink,
     private val log: (String) -> Unit,
 ) {
@@ -43,6 +45,7 @@ class AudioReceiver(
             while (running) {
                 packet.setLength(buf.size)
                 socket.receive(packet)
+                if (packet.address != peer) continue
                 val len = packet.length
                 if (prefix > 0) {
                     // Kontrol portu: sadece yeniden gönderilen ses paketleri (tür 0x56) işe yarar.

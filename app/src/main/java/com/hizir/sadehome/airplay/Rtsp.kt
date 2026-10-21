@@ -26,7 +26,8 @@ class RtspRequest(
 
     companion object {
         private const val MAX_LINE = 8 * 1024
-        private const val MAX_BODY = 4 * 1024 * 1024
+        private const val MAX_BODY = 2 * 1024 * 1024
+        private const val MAX_HEADERS = 64
 
         /** Akıştan bir istek okur; bağlantı temiz kapandıysa null. */
         fun read(input: InputStream): RtspRequest? {
@@ -35,11 +36,12 @@ class RtspRequest(
                 first = readLine(input) ?: return null
             } while (first.isEmpty()) // istekler arasındaki boş satırları atla
             val parts = first.split(' ')
-            if (parts.size < 3) throw IOException("Geçersiz istek satırı: $first")
+            if (parts.size < 3) throw IOException("Geçersiz istek satırı: ${first.take(80)}")
             val headers = LinkedHashMap<String, String>()
             while (true) {
                 val line = readLine(input) ?: throw IOException("Başlıklar yarıda kesildi")
                 if (line.isEmpty()) break
+                if (headers.size >= MAX_HEADERS) throw IOException("Çok fazla başlık")
                 val i = line.indexOf(':')
                 if (i <= 0) continue
                 headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()

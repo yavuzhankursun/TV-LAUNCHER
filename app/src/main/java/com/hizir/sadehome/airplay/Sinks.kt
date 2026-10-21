@@ -37,4 +37,11 @@ interface AirPlayListener {
     fun onAudioStop() {}
     /** Bağlantı tamamen bitti (TEARDOWN ya da kopma). */
     fun onSessionEnd() {}
+
+    /**
+     * Yeni bir gönderen akış kurmak istiyor: izin verilsin mi? Ağ iş parçacığından çağrılır ve cevap
+     * gelene kadar bekleyebilir. [identity]: pair-verify'da imzayla doğrulanmış Ed25519 açık anahtarı
+     * (hex); doğrulama yapılmadıysa null (hatırlanamaz, her seferinde sorulur). Varsayılan: reddet.
+     */
+    fun allowClient(identity: String?, name: String, model: String): Boolean = false
 }

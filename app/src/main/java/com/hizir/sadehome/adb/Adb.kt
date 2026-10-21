@@ -53,11 +53,11 @@ object Adb {
     }
 
     /** Sadece ADB iş parçacığında ya da [exec] üzerinden çağrılmalı. */
-    private fun shellBlocking(ctx: Context, command: String, allowPrompt: Boolean): String {
+    private fun shellBlocking(ctx: Context, command: String, allowPrompt: Boolean, timeoutMs: Int = 15_000): String {
         repeat(2) { attempt ->
             val c = ensure(ctx, allowPrompt)
             try {
-                return c.shell(command)
+                return c.shell(command, timeoutMs)
             } catch (e: IOException) {
                 // Bağlantı kopmuş olabilir (adbd yeniden başladı vb.); bir kez yeniden dene.
                 c.close()
@@ -69,12 +69,18 @@ object Adb {
     }
 
     /** Birden fazla komutu aynı sırayla, arka arkaya çalıştırmak için. */
-    fun session(ctx: Context, allowPrompt: Boolean, block: (run: (String) -> String) -> Unit, failed: (String) -> Unit = {}) {
+    fun session(
+        ctx: Context,
+        allowPrompt: Boolean,
+        block: (run: (String) -> String) -> Unit,
+        failed: (String) -> Unit = {},
+        timeoutMs: Int = 15_000,
+    ) {
         val app = ctx.applicationContext
         exec.execute {
             try {
                 ensure(app, allowPrompt)
-                block { cmd -> shellBlocking(app, cmd, false) }
+                block { cmd -> shellBlocking(app, cmd, false, timeoutMs) }
             } catch (t: Throwable) {
                 val msg = lastError ?: t.message ?: "ADB hatası"
                 Bg.ui { failed(msg) }
@@ -112,7 +118,7 @@ object Adb {
             val firstTime = !prefs.adbPaired
             prefs.adbPaired = true
             setStatus(Status.READY)
-            if (firstTime || !hasSecureSettings(ctx)) grantSelf(ctx, c)
+            if (firstTime || !hasSecureSettings(ctx) || !Settings.canDrawOverlays(ctx)) grantSelf(ctx, c)
             return c
         } catch (e: ConnectException) {
             setStatus(Status.NOT_LISTENING, "127.0.0.1:${prefs.adbPort} dinlemiyor")
@@ -134,11 +140,15 @@ object Adb {
      * İlk bağlantıda kendimize izin veriyoruz:
      * - WRITE_SECURE_SETTINGS: HOME yönlendirme servisini kendimiz açabilelim (zorla durdurulsa bile).
      * - GET_USAGE_STATS: "Kaldığın yerden devam et" ve son kullanılana göre sıralama.
+     * - SYSTEM_ALERT_WINDOW: AirPlay yansıtması başlayınca ekranın arka plandan açılabilmesi.
      */
     private fun grantSelf(ctx: Context, c: AdbConnection) {
         val pkg = ctx.packageName
         runCatching {
-            c.shell("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS; appops set $pkg GET_USAGE_STATS allow")
+            c.shell(
+                "pm grant $pkg android.permission.WRITE_SECURE_SETTINGS; appops set $pkg GET_USAGE_STATS allow; " +
+                    "appops set $pkg SYSTEM_ALERT_WINDOW allow",
+            )
         }
     }
 

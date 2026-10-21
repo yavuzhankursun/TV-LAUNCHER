@@ -18,7 +18,10 @@ import android.widget.TextView
  */
 class SidePanel(private val host: FrameLayout, private val behind: ViewGroup) {
     private val ctx: Context = host.context
-    private val scrim = View(ctx).apply {
+    // Tek renkli karartma: üst üste binen içerik yok, saydamlık animasyonu ara katman açmadan çizilir.
+    private val scrim = object : View(ctx) {
+        override fun hasOverlappingRendering() = false
+    }.apply {
         setBackgroundColor(0x99000000.toInt())
         alpha = 0f
     }

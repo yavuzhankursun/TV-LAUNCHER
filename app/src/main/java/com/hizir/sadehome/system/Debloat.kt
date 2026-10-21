@@ -86,4 +86,22 @@ object Debloat {
         val v = if (scale == 1f) "1.0" else scale.toString()
         Adb.shell(ctx, ANIM_KEYS.joinToString("; ") { "settings put global $it $v" }) { done(it != null) }
     }
+
+    /**
+     * Uygulamaları ART ile profil rehberli önceden derler (speed-profile). Sistem bunu normalde cihaz
+     * "boşta ve şarjda" iken yapar; sürekli açık bir TV kutusunda bu nadiren olur ve uygulamalar
+     * güncellemeden sonra JIT (çalışırken derleme) ile yavaş ve takılarak çalışır. Geri alınabilir:
+     * `cmd package compile --reset <paket>`.
+     */
+    fun optimize(ctx: Context, packages: List<String>, progress: (Int, Int) -> Unit, done: (Int?) -> Unit) {
+        val list = packages.filter { Cleaner.SAFE_NAME.matches(it) }
+        Adb.session(ctx, allowPrompt = false, block = { sh ->
+            var ok = 0
+            list.forEachIndexed { i, p ->
+                if (sh("cmd package compile -m speed-profile -f $p").contains("Success")) ok++
+                com.hizir.sadehome.data.Bg.ui { progress(i + 1, list.size) }
+            }
+            com.hizir.sadehome.data.Bg.ui { done(ok) }
+        }, failed = { done(null) }, timeoutMs = 300_000)
+    }
 }

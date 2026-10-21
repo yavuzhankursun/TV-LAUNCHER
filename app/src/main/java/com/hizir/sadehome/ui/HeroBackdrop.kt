@@ -109,6 +109,9 @@ class HeroBackdrop(context: Context) : View(context) {
         private const val BH = 360
         private val cache = LruCache<Int, Bitmap>(8)
 
+        /** Ana ekran görünmezken önbelleği boşalt; ekrandaki bitmap'ler görünüm tarafından tutulmaya devam eder. */
+        fun trim() = cache.evictAll()
+
         /** Arka planda çağrılmalı. Aynı renk için önbellekteki bitmap döner. */
         fun bake(color: Int, density: Float, screenWidth: Int): Bitmap {
             cache.get(color)?.let { return it }

@@ -56,10 +56,33 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = java.lang.Double.longBitsToDouble(sp.getLong(K_W_LON, 0))
         set(v) = sp.edit().putLong(K_W_LON, java.lang.Double.doubleToRawLongBits(v)).apply()
 
-    /** Bellek boşaltırken AirPlay alıcısına dokunma (görüntü aktarımı hazır kalsın). */
-    var keepAirPlay: Boolean
-        get() = sp.getBoolean(K_KEEP_AIRPLAY, true)
-        set(v) = sp.edit().putBoolean(K_KEEP_AIRPLAY, v).apply()
+    /** Yerleşik AirPlay alıcısı açık mı. */
+    var airPlayEnabled: Boolean
+        get() = sp.getBoolean(K_AIRPLAY, true)
+        set(v) = sp.edit().putBoolean(K_AIRPLAY, v).apply()
+
+    /** iPhone/Mac'te görünen ad; boşsa TV'nin cihaz adı. */
+    var airPlayName: String?
+        get() = sp.getString(K_AIRPLAY_NAME, null)
+        set(v) = sp.edit().putString(K_AIRPLAY_NAME, v).apply()
+
+    /** Sabit AirPlay cihaz kimliği ve Ed25519 tohumu (gönderenler TV'yi aynı cihaz olarak tanısın). */
+    var airPlayId: String?
+        get() = sp.getString(K_AIRPLAY_ID, null)
+        set(v) = sp.edit().putString(K_AIRPLAY_ID, v).commit().let { }
+    var airPlaySeed: String?
+        get() = sp.getString(K_AIRPLAY_SEED, null)
+        set(v) = sp.edit().putString(K_AIRPLAY_SEED, v).commit().let { }
+
+    /** Akıcı mod: uygulama açıldıktan sonra arka plandakileri kapatıp RAM'i ona bırak (ADB). */
+    var smoothMode: Boolean
+        get() = sp.getBoolean(K_SMOOTH, true)
+        set(v) = sp.edit().putBoolean(K_SMOOTH, v).apply()
+
+    /** Köşede kare hızı / takılma göstergesi (geliştirme ve doğrulama için). */
+    var perfOverlay: Boolean
+        get() = sp.getBoolean(K_PERF, false)
+        set(v) = sp.edit().putBoolean(K_PERF, v).apply()
 
     var browserDesktop: Boolean
         get() = sp.getBoolean(K_BROWSER_DESKTOP, true)
@@ -89,9 +112,14 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_W_CITY = "weather_city"
         private const val K_W_LAT = "weather_lat"
         private const val K_W_LON = "weather_lon"
-        private const val K_KEEP_AIRPLAY = "keep_airplay"
         private const val K_BROWSER_DESKTOP = "browser_desktop"
         private const val K_BOOKMARKS = "bookmarks"
+        private const val K_AIRPLAY = "airplay"
+        private const val K_AIRPLAY_NAME = "airplay_name"
+        private const val K_AIRPLAY_ID = "airplay_id"
+        private const val K_AIRPLAY_SEED = "airplay_seed"
+        private const val K_SMOOTH = "smooth_mode"
+        private const val K_PERF = "perf_overlay"
 
         val DEFAULT_BOOKMARKS = listOf(
             "Google" to "https://www.google.com",

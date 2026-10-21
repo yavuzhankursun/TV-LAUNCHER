@@ -5,7 +5,6 @@ import android.content.pm.ApplicationInfo
 import com.hizir.sadehome.adb.Adb
 import com.hizir.sadehome.data.AppEntry
 import com.hizir.sadehome.data.Memory
-import com.hizir.sadehome.data.Prefs
 
 /**
  * "Boşalt": arka planda çalışan uygulamaları ADB üzerinden `am force-stop` ile kapatır.
@@ -27,9 +26,11 @@ object Cleaner {
     private val NEVER_PREFIX = listOf("com.android.providers.", "com.google.android.gms.", "com.android.inputmethod")
     val SAFE_NAME = Regex("^[A-Za-z0-9_.]+$")
 
-    fun run(ctx: Context, apps: List<AppEntry>, airPlayPkg: String?, done: (Result) -> Unit, failed: (String) -> Unit) {
+    /**
+     * Arka planda çalışan uygulamaları kapatır. [keep]: o an açılan/öndeki uygulama (Akıcı mod), ona dokunulmaz.
+     */
+    fun run(ctx: Context, apps: List<AppEntry>, keep: String?, done: (Result) -> Unit, failed: (String) -> Unit) {
         val app = ctx.applicationContext
-        val prefs = Prefs.of(app)
         val launchable = apps.associateBy { it.pkg }
         Adb.session(app, allowPrompt = false, block = { sh ->
             val before = Memory.usedPercent(app)
@@ -39,7 +40,7 @@ object Cleaner {
                 addAll(HomeControl.STOCK_PACKAGES)
                 addAll(HomeControl.protectedByUser(app))
                 add(app.packageName)
-                if (prefs.keepAirPlay && airPlayPkg != null) add(airPlayPkg)
+                keep?.let(::add)
             }
             val pm = app.packageManager
             val targets = running.filter { pkg ->

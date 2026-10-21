@@ -151,6 +151,9 @@ object AppRepository {
     }
 
     /** Ana ekrandaki büyük logo: karttaki sade simgenin hedef boyutta, büyütme bulanıklığı olmadan çizilmiş hali. */
+    /** Arka plandayken büyük logoları bırak (öndeki uygulamaya RAM kalsın); gerekince yeniden çizilir. */
+    fun trimHeroCache() = heroCache.evictAll()
+
     fun heroLogo(ctx: Context, entry: AppEntry, sizePx: Int): Bitmap? {
         heroCache.get(entry.pkg)?.let { return it }
         val bmp = runCatching { Marks.render(ctx, entry.mark, entry.component, sizePx) }.getOrNull() ?: return null

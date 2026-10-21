@@ -466,7 +466,8 @@ class LauncherActivity : Activity() {
     private fun scheduleSmoothTrim(pkg: String) {
         if (!prefs.smoothMode || !Adb.isUsable(this)) return
         val apps = all
-        Bg.main.postDelayed({ Cleaner.run(applicationContext, apps, pkg, done = {}, failed = {}) }, 4000)
+        val spared = prefs.smoothKeep
+        Bg.main.postDelayed({ Cleaner.run(applicationContext, apps, pkg, done = {}, failed = {}, alsoKeep = spared) }, 4000)
     }
 
     private fun start(intent: Intent) {
@@ -532,9 +533,9 @@ class LauncherActivity : Activity() {
 
     // ---------------------------------------------------------------- paneller
 
-    private fun showAppMenu(e: AppEntry) {
+    private fun showAppMenu(e: AppEntry, focusIndex: Int = 0) {
         val custom = prefs.sort == Prefs.Sort.CUSTOM
-        panel.show("app:${e.pkg}") {
+        panel.show("app:${e.pkg}", focusIndex = focusIndex) {
             title(e.label, e.pkg)
             row("Aç", glyph = Glyph.OPEN) { panel.close(); launch(e, appsRow) }
             if (custom) {
@@ -560,6 +561,18 @@ class LauncherActivity : Activity() {
                         }
                         panel.close()
                     }
+                }
+                // Satır sırası: Aç, (taşı ×3), Gizle, Zorla durdur, bu satır → yeniden açınca odak burada kalsın.
+                val keepIndex = 1 + (if (custom) 3 else 0) + 2
+                val spared = e.pkg in prefs.smoothKeep
+                row(
+                    "Akıcı modda koru",
+                    if (spared) "Başka uygulama açılınca arka planda çalışmaya devam eder"
+                    else "Başka uygulama açılınca RAM için kapatılır",
+                    Glyph.BOLT, value = if (spared) "Açık" else "Kapalı",
+                ) {
+                    prefs.smoothKeep = if (spared) prefs.smoothKeep - e.pkg else prefs.smoothKeep + e.pkg
+                    showAppMenu(e, keepIndex)
                 }
             }
             row("Uygulama bilgisi", glyph = Glyph.INFO) { panel.close(); openAppInfo(e) }
@@ -703,6 +716,16 @@ class LauncherActivity : Activity() {
                 row("Bağlantıyı kes", st.client, Glyph.STOP, danger = true) { AirPlayService.instance?.disconnect() }
             }
             row("Görünen ad", value = AirPlayService.displayName(ctx), glyph = Glyph.DISPLAY) { askAirPlayName() }
+            val trusted = prefs.airPlayTrusted.size
+            row(
+                "Hatırlanan cihazları unut",
+                if (trusted == 0) "Yeni cihazlar bağlanmadan önce TV'de izin sorulur" else "Bunlar sorulmadan bağlanabiliyor",
+                Glyph.TRASH, value = trusted.toString(),
+            ) {
+                prefs.airPlayTrusted = emptySet()
+                toast("Hatırlanan AirPlay cihazları silindi")
+                showAirPlay(3)
+            }
             paragraph(
                 "iPhone / iPad: Denetim Merkezi → Ekran Yansıtma → \"${AirPlayService.displayName(ctx)}\".\n" +
                     "Sadece ses: müzik çalarken AirPlay simgesi → TV'yi seç.\n" +
@@ -768,6 +791,18 @@ class LauncherActivity : Activity() {
                     if (panel.tag == "smooth") showSmoothness(1)
                 })
             }
+            val keep = prefs.smoothKeep
+            val keepNames = keep.map { p -> all.firstOrNull { it.pkg == p }?.label ?: p }.sorted()
+            row(
+                "Akıcı modda dokunulmayanlar",
+                if (keep.isEmpty()) "Yok · uygulamaya uzun basıp \"Akıcı modda koru\" ile eklenir"
+                else keepNames.joinToString(", ") + " · seçince varsayılana döner (Play Store)",
+                Glyph.CHECK, value = keep.size.toString(),
+            ) {
+                prefs.smoothKeep = Prefs.DEFAULT_SMOOTH_KEEP
+                toast("Dokunulmayanlar varsayılana döndü: Play Store")
+                showSmoothness(2)
+            }
             row("TV'yi hızlandır", "Gereksiz ön yüklü uygulamaları kapat, animasyonları hızlandır", Glyph.CHIP) { showDebloat() }
             row(
                 "Performans göstergesi",
@@ -777,7 +812,7 @@ class LauncherActivity : Activity() {
                 prefs.perfOverlay = !prefs.perfOverlay
                 frameStats?.detach(); frameStats = null
                 if (prefs.perfOverlay) frameStats = FrameStats.attach(ctx, root)
-                showSmoothness(3)
+                showSmoothness(4)
             }
             paragraph(
                 "İpucu: Ayarlar → Ekran ve Ses → Gelişmiş görüntü → \"İçerik kare hızını eşleştir\" açıkken " +

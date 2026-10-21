@@ -61,6 +61,11 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getBoolean(K_AIRPLAY, true)
         set(v) = sp.edit().putBoolean(K_AIRPLAY, v).apply()
 
+    /** "Her zaman izin ver" denmiş gönderenlerin doğrulanmış Ed25519 açık anahtarları (hex). */
+    var airPlayTrusted: Set<String>
+        get() = sp.getStringSet(K_AIRPLAY_TRUSTED, emptySet())!!.toSet()
+        set(v) = sp.edit().putStringSet(K_AIRPLAY_TRUSTED, v).apply()
+
     /** iPhone/Mac'te görünen ad; boşsa TV'nin cihaz adı. */
     var airPlayName: String?
         get() = sp.getString(K_AIRPLAY_NAME, null)
@@ -78,6 +83,14 @@ class Prefs private constructor(private val sp: SharedPreferences) {
     var smoothMode: Boolean
         get() = sp.getBoolean(K_SMOOTH, true)
         set(v) = sp.edit().putBoolean(K_SMOOTH, v).apply()
+
+    /**
+     * Akıcı modun kapatmayacağı uygulamalar (uzun basma menüsünden seçilir). Hiç ayarlanmadıysa Play Store:
+     * arka planda güncelleme indirirken yarıda kesilmesin.
+     */
+    var smoothKeep: Set<String>
+        get() = if (sp.contains(K_SMOOTH_KEEP)) sp.getStringSet(K_SMOOTH_KEEP, emptySet())!!.toSet() else DEFAULT_SMOOTH_KEEP
+        set(v) = sp.edit().putStringSet(K_SMOOTH_KEEP, v).apply()
 
     /** Köşede kare hızı / takılma göstergesi (geliştirme ve doğrulama için). */
     var perfOverlay: Boolean
@@ -118,7 +131,10 @@ class Prefs private constructor(private val sp: SharedPreferences) {
         private const val K_AIRPLAY_NAME = "airplay_name"
         private const val K_AIRPLAY_ID = "airplay_id"
         private const val K_AIRPLAY_SEED = "airplay_seed"
+        private const val K_AIRPLAY_TRUSTED = "airplay_trusted"
         private const val K_SMOOTH = "smooth_mode"
+        private const val K_SMOOTH_KEEP = "smooth_keep"
+        val DEFAULT_SMOOTH_KEEP = setOf("com.android.vending")
         private const val K_PERF = "perf_overlay"
 
         val DEFAULT_BOOKMARKS = listOf(

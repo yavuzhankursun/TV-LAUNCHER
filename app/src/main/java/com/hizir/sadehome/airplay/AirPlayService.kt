@@ -141,6 +141,19 @@ class AirPlayService : Service() {
             if (!AirPlayState.mirroring) releaseWifiLock()
         }
 
+        override fun allowClient(identity: String?, name: String, model: String): Boolean {
+            val prefs = Prefs.of(this@AirPlayService)
+            if (identity != null && identity in prefs.airPlayTrusted) return true
+            return when (Consent.ask(this@AirPlayService, name, model, canRemember = identity != null)) {
+                Consent.Answer.DENY -> false
+                Consent.Answer.ONCE -> true
+                Consent.Answer.ALWAYS -> {
+                    identity?.let { prefs.airPlayTrusted = prefs.airPlayTrusted + it }
+                    true
+                }
+            }
+        }
+
         override fun onSessionEnd() {
             MirrorHub.reset()
             releaseWifiLock()
@@ -218,11 +231,16 @@ class AirPlayService : Service() {
             Bg.main.postDelayed({ start(ctx) }, 600)
         }
 
-        /** Görünen ad: ayarlardan, yoksa TV'nin cihaz adı (Ayarlar → Sistem → Hakkında → Cihaz adı). */
-        fun displayName(ctx: Context): String =
-            Prefs.of(ctx).airPlayName?.takeIf { it.isNotBlank() }
-                ?: Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() }
-                ?: "Mi Box"
+        /**
+         * Görünen ad: ayarlardan, yoksa TV'nin cihaz adı + " AirPlay". Cihaz adının kendisi kullanılamaz:
+         * Google TV kumanda servisi (_androidtvremote2) aynı adla duyuruluyor ve Android'in mDNS'i aynı
+         * adlı ikinci servisi sessizce hiç duyurmuyor (cihazda görüldü) → iPhone listesinde TV çıkmıyordu.
+         */
+        fun displayName(ctx: Context): String {
+            val device = Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME)?.trim()?.takeIf { it.isNotEmpty() }
+            val base = Prefs.of(ctx).airPlayName?.trim()?.takeIf { it.isNotEmpty() } ?: device ?: "Mi Box"
+            return if (device != null && base.equals(device, ignoreCase = true)) "$base AirPlay" else base
+        }
 
         private fun deviceId(prefs: Prefs): String {
             prefs.airPlayId?.let { return it }

@@ -103,11 +103,26 @@ class AirPlayServer(
             val socket = try {
                 s.accept()
             } catch (e: IOException) {
-                break
+                // Geçici hata (ör. dosya tanıtıcısı tükendi) sunucuyu kalıcı olarak durdurmasın.
+                if (!running || s.isClosed) break
+                log("Bağlantı kabul edilemedi: ${e.message}")
+                runCatching { Thread.sleep(200) }
+                continue
             }
-            val c = Conn(socket)
-            connections += c
-            Thread({ c.run() }, "airplay-conn").apply { isDaemon = true; start() }
+            if (connections.size >= MAX_CONNECTIONS) {
+                log("Çok fazla bağlantı; ${socket.inetAddress.hostAddress} reddedildi")
+                runCatching { socket.close() }
+                continue
+            }
+            try {
+                socket.soTimeout = READ_TIMEOUT_MS
+                val c = Conn(socket)
+                connections += c
+                Thread({ c.run() }, "airplay-conn").apply { isDaemon = true; start() }
+            } catch (t: Throwable) {
+                log("Bağlantı başlatılamadı: $t")
+                runCatching { socket.close() }
+            }
         }
     }
 
@@ -119,6 +134,8 @@ class AirPlayServer(
         private var theirEdPublic: ByteArray? = null
         private var ecdhSecret: ByteArray? = null
         private var verified = false
+        /** Kullanıcı bu gönderene (bu bağlantı için) izin verdi. İzin olmadan hiçbir akış kurulmaz. */
+        private var approved = false
         private var aesKey: ByteArray? = null
         private var aesIv: ByteArray? = null
         private var ntp: NtpTiming? = null
@@ -323,7 +340,20 @@ class AirPlayServer(
             val ekey = p["ekey"] as? ByteArray
             val eiv = p["eiv"] as? ByteArray
             if (ekey != null && eiv != null) {
-                // İlk SETUP: oturum anahtarı ve zaman eşitlemesi.
+                // İlk SETUP: oturum anahtarı ve zaman eşitlemesi. Önce kullanıcı onayı: tanınmayan bir
+                // gönderen TV'de izin almadan görüntü/ses açamaz ve mevcut yansıtmayı kesemez.
+                if (!approved) {
+                    val name = clean(p["name"] as? String)
+                    val model = clean(p["model"] as? String)
+                    val identity = theirEdPublic?.takeIf { verified }?.joinToString("") { "%02x".format(it) }
+                    if (!listener.allowClient(identity, name, model)) {
+                        log("Bağlantı reddedildi: $name ($model) ${socket.inetAddress.hostAddress}")
+                        res.status(403, "Forbidden")
+                        res.disconnect = true
+                        return
+                    }
+                    approved = true
+                }
                 val fp = fairPlay ?: throw IOException("fp-setup yapılmadan SETUP")
                 var key = fp.decrypt(ekey)
                 // Eşleştirme yapıldıysa anahtar ECDH sırrıyla karıştırılır.
@@ -346,6 +376,11 @@ class AirPlayServer(
             }
             val streams = p["streams"] as? List<*>
             if (streams != null) {
+                if (!approved) {
+                    res.status(403, "Forbidden")
+                    res.disconnect = true
+                    return
+                }
                 val replies = ArrayList<Any?>()
                 for (s in streams) {
                     val sd = s as? Map<*, *> ?: continue
@@ -354,7 +389,7 @@ class AirPlayServer(
                             val key = aesKey ?: throw IOException("Anahtarsız görüntü SETUP")
                             val id = sd["streamConnectionID"] as? Long ?: 0L
                             stopStreams(mirror = true, audio = false)
-                            val m = MirrorReceiver(key, id, video, log) {
+                            val m = MirrorReceiver(key, id, socket.inetAddress, video, log) {
                                 if (mirror != null) {
                                     mirror = null
                                     listener.onMirrorStop()
@@ -370,7 +405,7 @@ class AirPlayServer(
                             val spf = (sd["spf"] as? Long)?.toInt() ?: if (ct == 2) 352 else 480
                             stopStreams(mirror = false, audio = true)
                             audio.start(ct, spf)
-                            val a = AudioReceiver(key, aesIv ?: ByteArray(16), ct, audio, log)
+                            val a = AudioReceiver(key, aesIv ?: ByteArray(16), ct, socket.inetAddress, audio, log)
                             audioRx = a
                             listener.onAudioStart()
                             replies += linkedMapOf("type" to 96L, "dataPort" to a.dataPort.toLong(), "controlPort" to a.controlPort.toLong())
@@ -424,6 +459,14 @@ class AirPlayServer(
         const val MODEL = "AppleTV3,2"
         const val VERSION = "220.68"
         const val PI = "2e388006-13ba-4041-9a67-25dd4a43d536"
+
+        /** Aynı anda en fazla bu kadar bağlantı (bir iPhone 1-2 açar); fazlası anında kapatılır. */
+        const val MAX_CONNECTIONS = 4
+        /** iPhone/Mac oturum boyunca birkaç saniyede bir istek (feedback) gönderir; susan bağlantı kapanır. */
+        const val READ_TIMEOUT_MS = 90_000
+
+        /** Ağdan gelen ad/model: ekranda gösterilecek; kontrol karakterleri atılır, uzunluk sınırlanır. */
+        fun clean(s: String?): String = s.orEmpty().filter { !it.isISOControl() }.trim().take(48)
 
         fun sha512(a: ByteArray, b: ByteArray): ByteArray {
             val md = MessageDigest.getInstance("SHA-512")

@@ -28,8 +28,16 @@ object Cleaner {
 
     /**
      * Arka planda çalışan uygulamaları kapatır. [keep]: o an açılan/öndeki uygulama (Akıcı mod), ona dokunulmaz.
+     * [alsoKeep]: kullanıcının "Akıcı modda kapatma" dediği uygulamalar.
      */
-    fun run(ctx: Context, apps: List<AppEntry>, keep: String?, done: (Result) -> Unit, failed: (String) -> Unit) {
+    fun run(
+        ctx: Context,
+        apps: List<AppEntry>,
+        keep: String?,
+        done: (Result) -> Unit,
+        failed: (String) -> Unit,
+        alsoKeep: Set<String> = emptySet(),
+    ) {
         val app = ctx.applicationContext
         val launchable = apps.associateBy { it.pkg }
         Adb.session(app, allowPrompt = false, block = { sh ->
@@ -41,6 +49,7 @@ object Cleaner {
                 addAll(HomeControl.protectedByUser(app))
                 add(app.packageName)
                 keep?.let(::add)
+                addAll(alsoKeep)
             }
             val pm = app.packageManager
             val targets = running.filter { pkg ->
@@ -53,8 +62,17 @@ object Cleaner {
             if (targets.isNotEmpty()) {
                 sh(targets.joinToString("; ") { "am force-stop $it" })
             }
-            // Önbellekteki (cached) arka plan süreçlerini de bırak.
-            sh("am kill-all")
+            // Önbellekteki (cached) arka plan süreçlerini de bırak. `am kill-all` paket hariç tutamıyor; kullanıcı
+            // "Akıcı modda koru" dediği uygulamalar varsa onlar hariç tek tek `am kill` (yalnızca arka plandaki,
+            // güvenle öldürülebilecek süreçleri kapatır; çalışan servisleri ve öndekini kapatmaz).
+            if (alsoKeep.isEmpty()) {
+                sh("am kill-all")
+            } else {
+                val cached = running.filter { pkg ->
+                    pkg !in protect && pkg !in targets && NEVER_PREFIX.none { pkg.startsWith(it) } && SAFE_NAME.matches(pkg)
+                }
+                if (cached.isNotEmpty()) sh(cached.joinToString("; ") { "am kill $it" })
+            }
             Thread.sleep(1500)
             val after = Memory.usedPercent(app)
             val names = targets.map { launchable[it]?.label ?: it }

@@ -6,3 +6,6 @@ local.properties
 .DS_Store
 captures/
 .kotlin/
+
+# Yerel geliştirme notları
+CLAUDE.md

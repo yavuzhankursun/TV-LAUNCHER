@@ -25,7 +25,7 @@ object Cleaner {
         "com.android.providers.media", "com.android.providers.tv", "com.android.providers.settings",
     )
     private val NEVER_PREFIX = listOf("com.android.providers.", "com.google.android.gms.", "com.android.inputmethod")
-    private val SAFE_NAME = Regex("^[A-Za-z0-9_.]+$")
+    val SAFE_NAME = Regex("^[A-Za-z0-9_.]+$")
 
     fun run(ctx: Context, apps: List<AppEntry>, airPlayPkg: String?, done: (Result) -> Unit, failed: (String) -> Unit) {
         val app = ctx.applicationContext

@@ -30,9 +30,10 @@ class HomeWatcherService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg !in HomeControl.STOCK_PACKAGES) return
         if (Prefs.of(this).mode != Prefs.Mode.NEW) return
-        // Sadece Google TV'nin asıl ana ekranı; aynı paketteki ayar paneli vb. ekranlara dokunma.
+        // Google TV'nin ana ekranı. Ana ekran öne gelince olay bazen aktivite adıyla değil, kök görünümün
+        // sınıfıyla (FrameLayout) geliyor; sadece aktivite adına bakınca yönlendirme kaçıyordu (cihazda görüldü).
         val cls = event.className?.toString() ?: return
-        if (cls !in HomeControl.stockHomeClasses(this)) return
+        if (cls !in HomeControl.stockHomeClasses(this) && cls != ROOT_VIEW_CLASS) return
         if (SystemClock.elapsedRealtime() - lastRedirect < 800) return
         goHome()
     }
@@ -50,4 +51,8 @@ class HomeWatcherService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
+
+    private companion object {
+        const val ROOT_VIEW_CLASS = "android.widget.FrameLayout"
+    }
 }

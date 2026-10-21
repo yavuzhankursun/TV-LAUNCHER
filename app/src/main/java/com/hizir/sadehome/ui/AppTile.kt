@@ -16,6 +16,7 @@ import android.view.View
 import android.view.animation.OvershootInterpolator
 import android.widget.LinearLayout
 import com.hizir.sadehome.data.AppEntry
+import com.hizir.sadehome.data.Mark
 
 /** Uygulama kartı + odaktayken altında beliren "Netflix · OK ile aç" yazısı. */
 @SuppressLint("ViewConstructor")
@@ -23,8 +24,7 @@ class AppTile(context: Context, val entry: AppEntry, bannerMode: Boolean) : Line
     val card = AppCardView(context, entry, bannerMode)
     private val caption = context.text("", 11f, Palette.TEXT_DIM, Fonts.medium).apply {
         alpha = 0f
-        val name = SpannableBold.make(entry.label, " · OK ile aç")
-        text = name
+        text = SpannableBold.make(entry.label, "")
     }
     private val overshoot = OvershootInterpolator(1.6f)
 
@@ -100,8 +100,9 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
         setShadowLayer(context.dp(3f), 0f, context.dp(1f), 0x66000000)
     }
     private val shinePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val shineMatrix = android.graphics.Matrix()
     private var shineT = -1f
-    private val iconRect = RectF()
+    private val markRect = RectF()
     private val src = Rect()
 
     fun shine() {
@@ -129,6 +130,11 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
         gloss.shader = LinearGradient(
             0f, 0f, 0f, h * 0.6f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP,
         )
+        // Parlama bandı bir kez oluşturulur; her karede sadece kaydırılır (çizimde nesne oluşturma yok).
+        shinePaint.shader = LinearGradient(
+            0f, 0f, w * 0.45f, h.toFloat(),
+            intArrayOf(0x00FFFFFF, 0x55FFFFFF, 0x00FFFFFF), null, Shader.TileMode.CLAMP,
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -144,20 +150,22 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
         } else {
             canvas.drawRect(rect, bg)
             canvas.drawRect(0f, 0f, w, h * 0.6f, gloss)
-            val s = h * 0.36f
-            val pad = h * 0.13f
-            iconRect.set(w - pad - s, pad, w - pad, pad + s)
-            src.set(0, 0, entry.icon.width, entry.icon.height)
-            canvas.drawBitmap(entry.icon, src, iconRect, iconPaint)
-            val text = TextUtils.ellipsize(entry.label, label, w - pad * 2, TextUtils.TruncateAt.END)
-            canvas.drawText(text, 0, text.length, pad, h - pad, label)
+            val mark = entry.markBitmap
+            if (mark != null) {
+                // Ortada sade simge (Apple TV gibi); ad, kart seçilince altta beliriyor.
+                val s = h * if (entry.mark.kind == Mark.Kind.ICON) 0.56f else 0.62f
+                markRect.set((w - s) / 2, (h - s) / 2, (w + s) / 2, (h + s) / 2)
+                src.set(0, 0, mark.width, mark.height)
+                canvas.drawBitmap(mark, src, markRect, iconPaint)
+            } else {
+                val pad = h * 0.13f
+                val text = TextUtils.ellipsize(entry.label, label, w - pad * 2, TextUtils.TruncateAt.END)
+                canvas.drawText(text, 0, text.length, pad, h - pad, label)
+            }
         }
         if (shineT >= 0f) {
-            val x = -w * 0.6f + shineT * w * 2.2f
-            shinePaint.shader = LinearGradient(
-                x, 0f, x + w * 0.45f, h,
-                intArrayOf(0x00FFFFFF, 0x55FFFFFF, 0x00FFFFFF), null, Shader.TileMode.CLAMP,
-            )
+            shineMatrix.setTranslate(-w * 0.6f + shineT * w * 2.2f, 0f)
+            shinePaint.shader?.setLocalMatrix(shineMatrix)
             canvas.drawRect(rect, shinePaint)
         }
         canvas.restore()

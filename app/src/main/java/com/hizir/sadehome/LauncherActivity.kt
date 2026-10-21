@@ -7,9 +7,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.tv.TvContract
-import android.media.tv.TvInputInfo
-import android.media.tv.TvInputManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -79,7 +76,6 @@ class LauncherActivity : Activity() {
     private lateinit var airPlayPill: Pill
     private lateinit var ramText: TextView
     private lateinit var ramDot: View
-    private lateinit var freePill: Pill
 
     // Hero
     private lateinit var accentBar: View
@@ -90,15 +86,12 @@ class LauncherActivity : Activity() {
     // Satırlar
     private lateinit var appsCount: TextView
     private lateinit var appsRow: TrackRow
-    private lateinit var bottomHeader: TextView
-    private lateinit var bottomRow: TrackRow
 
     private var all: List<AppEntry> = emptyList()
     private var apps: List<AppEntry> = emptyList()
     private var current: AppEntry? = null
     private var airPlay: AppEntry? = null
     private var resumed = false
-    private var freeing = false
     private var ramTicks = 0
     private var speedTest: SpeedTest? = null
 
@@ -222,12 +215,8 @@ class LauncherActivity : Activity() {
 
         appsRow = TrackRow(this).apply { setPadding(0, 0, dp(SIDE), 0) }
         main.addView(appsRow, lp(MATCH, WRAP))
-
-        bottomHeader = text("Hızlı ayarlar", 13f, Palette.TEXT_DIM, Fonts.bold)
-        main.addView(bottomHeader, lp(MATCH, WRAP).margins(t = dp(4), b = dp(10)))
-        bottomRow = TrackRow(this).apply { setPadding(0, dp(3), dp(SIDE), dp(3)) }
-        main.addView(bottomRow, lp(MATCH, WRAP))
-        buildBottomRow()
+        // Satırın altında: odaktaki kartın adı + kumanda ipuçları için boşluk
+        main.addView(View(this), lp(MATCH, dp(40)))
 
         root.addView(buildHints(), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END).apply {
             setMargins(0, 0, dp(SIDE), dp(14))
@@ -264,8 +253,7 @@ class LauncherActivity : Activity() {
         bar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
 
         airPlayPill = Pill(this, Glyph.CAST, "AirPlay").apply {
-            visibility = View.GONE
-            setOnClickListener { airPlay?.let { launch(it, this) } }
+            setOnClickListener { airPlay?.let { launch(it, this) } ?: openAirPlayStore() }
             setOnLongClickListener { airPlay?.let { showAppMenu(it) }; true }
         }
         bar.addView(airPlayPill, lp(WRAP, MATCH).margins(r = dp(10)))
@@ -277,18 +265,14 @@ class LauncherActivity : Activity() {
         val ram = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             background = roundRect(Palette.GLASS, dp(17f), Palette.GLASS_STROKE, dp(1))
-            setPadding(dp(12), 0, dp(3), 0)
+            setPadding(dp(12), 0, 0, 0)
             clipChildren = false
         }
         ram.addView(ImageView(this).apply { setImageDrawable(GlyphDrawable(Glyph.CHIP, Palette.TEXT_DIM)) }, lp(dp(15), dp(15)))
         ramText = text("%--", 13f, Palette.TEXT, Fonts.bold)
         ram.addView(ramText, lp(WRAP, WRAP).margins(l = dp(6)))
         ramDot = View(this).apply { background = com.hizir.sadehome.ui.oval(Palette.GOOD) }
-        ram.addView(ramDot, lp(dp(7), dp(7)).margins(l = dp(7), r = dp(9)))
-        freePill = Pill(this, Glyph.BOLT, "Boşalt", normalBg = Palette.ROSE, heightDp = 28).apply {
-            setOnClickListener { freeMemory() }
-        }
-        ram.addView(freePill, lp(WRAP, dp(28)))
+        ram.addView(ramDot, lp(dp(7), dp(7)).margins(l = dp(7), r = dp(12)))
         bar.addView(ram, lp(WRAP, MATCH).margins(r = dp(10)))
 
         val settings = Pill(this, Glyph.GEAR, null).apply { setOnClickListener { showSettings() } }
@@ -313,16 +297,6 @@ class LauncherActivity : Activity() {
         heroSubtitle = text("", 15f, Palette.TEXT_DIM, Fonts.medium)
         hero.addView(heroSubtitle, lp(dp(560), WRAP).margins(t = dp(8)))
 
-        val buttons = LinearLayout(this).apply { clipChildren = false }
-        val open = Pill(this, Glyph.OPEN, "OK ile aç", heightDp = 30).apply {
-            setOnClickListener { current?.let { e -> launch(e, this) } }
-        }
-        val info = Pill(this, Glyph.INFO, "Uygulama bilgisi", heightDp = 30).apply {
-            setOnClickListener { current?.let { openAppInfo(it) } }
-        }
-        buttons.addView(open, lp(WRAP, dp(30)).margins(r = dp(10)))
-        buttons.addView(info, lp(WRAP, dp(30)))
-        hero.addView(buttons, lp(WRAP, WRAP).margins(t = dp(16)))
         return hero
     }
 
@@ -333,46 +307,6 @@ class LauncherActivity : Activity() {
         row.addView(keyBadge("OK"))
         row.addView(text("aç · basılı tut: seçenekler", 11f, Palette.TEXT_FAINT), lp(WRAP, WRAP).margins(l = dp(6)))
         return row
-    }
-
-    private class Shortcut(val glyph: Glyph, val label: String, val intent: Intent?, val action: (() -> Unit)? = null)
-
-    private fun buildBottomRow() {
-        val pm = packageManager
-        val items = ArrayList<Shortcut>()
-
-        // Fiziksel girişler (HDMI vb.) — Mi Box'ta yok; girişi olan TV'lerde otomatik görünür.
-        val inputs = runCatching {
-            (getSystemService(Context.TV_INPUT_SERVICE) as? TvInputManager)?.tvInputList
-                ?.filter { it.type != TvInputInfo.TYPE_TUNER && it.isPassthroughInput }
-        }.getOrNull().orEmpty()
-        for (info in inputs) {
-            val label = runCatching { info.loadLabel(this).toString() }.getOrDefault("Giriş")
-            items += Shortcut(Glyph.INPUT, label, Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(info.id)))
-        }
-        bottomHeader.text = if (inputs.isEmpty()) "Hızlı ayarlar" else "Girişler ve hızlı ayarlar"
-
-        items += Shortcut(Glyph.BOLT, "TV'yi hızlandır", null) { showDebloat() }
-        items += Shortcut(Glyph.WIFI, "Wi‑Fi", Intent(Settings.ACTION_WIFI_SETTINGS))
-        items += Shortcut(Glyph.BLUETOOTH, "Bluetooth", Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-        items += Shortcut(Glyph.DISPLAY, "Görüntü", Intent(Settings.ACTION_DISPLAY_SETTINGS))
-        items += Shortcut(Glyph.SOUND, "Ses", Intent(Settings.ACTION_SOUND_SETTINGS))
-        items += Shortcut(Glyph.GRID, "Uygulamalar", Intent(Settings.ACTION_APPLICATION_SETTINGS))
-        items += Shortcut(Glyph.STORAGE, "Depolama", Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS))
-        items += Shortcut(Glyph.MOON, "Ekran koruyucu", Intent(Settings.ACTION_DREAM_SETTINGS))
-        items += Shortcut(Glyph.CLOCK, "Tarih ve saat", Intent(Settings.ACTION_DATE_SETTINGS))
-        items += Shortcut(Glyph.CODE, "Geliştirici", Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-        items += Shortcut(Glyph.GEAR, "Tüm ayarlar", Intent(Settings.ACTION_SETTINGS))
-
-        bottomRow.content.removeAllViews()
-        for (s in items) {
-            if (s.intent != null && s.action == null && s.intent.resolveActivity(pm) == null) continue
-            val pill = Pill(this, s.glyph, s.label, heightDp = 32)
-            pill.setOnClickListener {
-                if (s.action != null) s.action.invoke() else start(s.intent!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            bottomRow.content.addView(pill, lp(WRAP, dp(32)).margins(r = dp(10)))
-        }
     }
 
     // ---------------------------------------------------------------- uygulamalar
@@ -399,7 +333,7 @@ class LauncherActivity : Activity() {
         all = list
         apps = AppRepository.arrange(this, list)
         airPlay = AirPlay.find(list)
-        airPlayPill.visibility = if (airPlay != null) View.VISIBLE else View.GONE
+        if (airPlay == null) airPlayPill.setDot(0)
         appsCount.text = apps.size.toString()
 
         val hadFocus = appsRow.hasFocus() || root.findFocus() == null
@@ -440,13 +374,16 @@ class LauncherActivity : Activity() {
     private var backdropPkg: String? = null
     private val backdropUpdate = Runnable {
         val e = current ?: return@Runnable
-        val size = (resources.displayMetrics.heightPixels * 0.36f).toInt().coerceAtLeast(64)
+        val dm = resources.displayMetrics
+        val size = (dm.heightPixels * 0.36f).toInt().coerceAtLeast(64)
         Bg.run {
+            // Arka plan ve logo arka planda hazırlanır; arayüz iş parçacığı sadece hazır bitmap'leri çizer.
+            val baked = HeroBackdrop.bake(e.accent, dm.density, dm.widthPixels)
             val logo = AppRepository.heroLogo(this, e, size)
             Bg.ui {
                 if (current?.pkg != e.pkg) return@ui
                 backdropPkg = e.pkg
-                backdrop.set(e.accent, logo)
+                backdrop.set(baked, logo)
             }
         }
     }
@@ -508,6 +445,14 @@ class LauncherActivity : Activity() {
         start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
+    /** Kutuda AirPlay alıcısı yoksa: Play Store'da AirScreen sayfasını aç (kurulumu kullanıcı yapar). */
+    private fun openAirPlayStore() {
+        val id = AirPlay.SUGGESTED
+        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$id")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (market.resolveActivity(packageManager) != null) start(market)
+        else toast("AirPlay için Play Store'dan bir alıcı uygulama kurun (ör. AirScreen)")
+    }
+
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     // ---------------------------------------------------------------- üst çubuk durumu
@@ -537,6 +482,7 @@ class LauncherActivity : Activity() {
             airPlayPill.setDot(0)
             return
         }
+        if (!Cleaner.SAFE_NAME.matches(ap.pkg)) return
         Adb.shell(this, "pidof ${ap.pkg}") { out ->
             airPlayPill.setDot(
                 when {
@@ -558,32 +504,6 @@ class LauncherActivity : Activity() {
                 weatherText.text = "${Weather.format(w)} · ${w.city}"
             }
         }
-    }
-
-    // ---------------------------------------------------------------- bellek
-
-    private fun freeMemory() {
-        if (freeing) return
-        if (!Adb.isUsable(this)) {
-            showAdbSetup { freeMemory() }
-            return
-        }
-        freeing = true
-        freePill.setText("Boşaltılıyor…")
-        Cleaner.run(this, all, airPlay?.pkg, done = { r ->
-            freeing = false
-            freePill.setText("Boşalt")
-            updateRam()
-            val freed = (r.before - r.after).coerceAtLeast(0)
-            toast(
-                if (r.stopped.isEmpty()) "Zaten temiz · bellek %${r.after}"
-                else "Bellek %${r.before} → %${r.after} (−$freed) · ${r.stopped.size} uygulama kapatıldı"
-            )
-        }, failed = {
-            freeing = false
-            freePill.setText("Boşalt")
-            showAdbSetup { freeMemory() }
-        })
     }
 
     // ---------------------------------------------------------------- paneller

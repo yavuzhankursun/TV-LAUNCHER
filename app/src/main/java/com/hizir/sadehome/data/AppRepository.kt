@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Process
@@ -29,6 +28,10 @@ class AppEntry(
     val isSystem: Boolean,
     val isLeanback: Boolean,
     val category: Int,
+    /** Kartta ve büyük logoda gösterilecek sade simgenin türü. */
+    val mark: Mark,
+    /** Kart için önceden çizilmiş simge (beyaz marka/silüet ya da renkli ikon). */
+    val markBitmap: Bitmap?,
 ) {
     @Volatile var banner: Drawable? = null
     @Volatile var lastUsed: Long = 0L
@@ -69,16 +72,19 @@ object AppRepository {
                 val iconDrawable = runCatching { ai.loadIcon(pm) }.getOrNull()
                     ?: pm.defaultActivityIcon
                 val icon = renderIcon(iconDrawable, 96)
+                val mark = Marks.of(ctx, ai.packageName, iconDrawable)
                 val appInfo = ai.applicationInfo
                 val entry = AppEntry(
                     pkg = ai.packageName,
                     component = cn,
                     label = label,
                     icon = icon,
-                    accent = Accent.from(icon, ai.packageName),
+                    accent = mark.color ?: Accent.from(icon, ai.packageName),
                     isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
                     isLeanback = leanback,
                     category = appInfo.category,
+                    mark = mark,
+                    markBitmap = runCatching { Marks.render(ctx, mark, cn, MARK_PX) }.getOrNull(),
                 )
                 if (withBanner) entry.banner = runCatching { ai.loadBanner(pm) ?: appInfo.loadBanner(pm) }.getOrNull()
                 seen[ai.packageName] = entry
@@ -144,35 +150,16 @@ object AppRepository {
         return changed
     }
 
-    /** Ana ekrandaki büyük logo: uyarlanabilir ikonların sadece ön katmanı (ör. Netflix'in "N"si). */
+    /** Ana ekrandaki büyük logo: karttaki sade simgenin hedef boyutta, büyütme bulanıklığı olmadan çizilmiş hali. */
     fun heroLogo(ctx: Context, entry: AppEntry, sizePx: Int): Bitmap? {
         heroCache.get(entry.pkg)?.let { return it }
-        val pm = ctx.packageManager
-        val d = runCatching { pm.getActivityIcon(entry.component) }.getOrNull() ?: return null
-        val bmp = if (d is AdaptiveIconDrawable && d.foreground != null) {
-            // Ön katman 108 birimlik; görünen kısım ortadaki 72 birim. Kenarları kırpmak için büyüt.
-            val full = (sizePx * 108f / 72f).toInt()
-            val out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-            val c = Canvas(out)
-            val off = -(full - sizePx) / 2
-            d.foreground.setBounds(off, off, off + full, off + full)
-            d.foreground.draw(c)
-            out
-        } else {
-            // Klasik kare ikonlar yuvarlak köşeli çizilir.
-            val out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-            val c = Canvas(out)
-            val r = sizePx * 0.22f
-            c.clipPath(android.graphics.Path().apply {
-                addRoundRect(0f, 0f, sizePx.toFloat(), sizePx.toFloat(), r, r, android.graphics.Path.Direction.CW)
-            })
-            d.setBounds(0, 0, sizePx, sizePx)
-            d.draw(c)
-            out
-        }
+        val bmp = runCatching { Marks.render(ctx, entry.mark, entry.component, sizePx) }.getOrNull() ?: return null
         heroCache.put(entry.pkg, bmp)
         return bmp
     }
+
+    /** Kart simgesinin piksel boyutu (kartta ~40 dp; 2x yoğunlukta keskin kalsın). */
+    private const val MARK_PX = 112
 
     fun renderIcon(d: Drawable, size: Int): Bitmap {
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)

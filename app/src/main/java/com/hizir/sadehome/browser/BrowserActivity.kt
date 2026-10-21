@@ -76,7 +76,7 @@ class BrowserActivity : Activity() {
         buildUi()
         setContentView(root)
         setupWeb()
-        val data = intent?.data?.toString()
+        val data = webUrlOf(intent)
         if (data != null) web.loadUrl(data) else if (savedInstanceState == null) showStart()
         web.post {
             cursor.moveTo(webBox.width / 2f, webBox.height / 2f + toolbar.height)
@@ -86,7 +86,16 @@ class BrowserActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.data?.let { web.loadUrl(it.toString()); web.requestFocus() }
+        webUrlOf(intent)?.let { web.loadUrl(it); web.requestFocus() }
+    }
+
+    /**
+     * Dışarıdan gelen adres yalnızca http/https olabilir. Açık (explicit) intent intent-filter'ı atlar;
+     * kontrol olmasa başka bir uygulama `javascript:` göndererek açık sitede kod çalıştırabilirdi.
+     */
+    private fun webUrlOf(intent: Intent?): String? {
+        val uri = intent?.data ?: return null
+        return uri.toString().takeIf { uri.scheme.equals("http", true) || uri.scheme.equals("https", true) }
     }
 
     override fun onResume() {

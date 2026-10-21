@@ -14,6 +14,9 @@ object AirPlay {
         "com.waxrain.airplaydmr_SDK",
         "com.xindawn.droidtv",
     )
+    /** Alıcı kurulu değilse Play Store'da önerilen: AirScreen (ücretsiz, Google TV'de çalışıyor). */
+    const val SUGGESTED = "com.ionitech.airscreen"
+
     private val NAME_HINTS = listOf("airplay", "airscreen", "airpin", "airreceiver")
 
     fun find(apps: List<AppEntry>): AppEntry? {

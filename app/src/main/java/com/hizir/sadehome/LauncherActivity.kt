@@ -23,6 +23,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.hizir.sadehome.adb.Adb
+import com.hizir.sadehome.airplay.AirPlayService
+import com.hizir.sadehome.airplay.AirPlayState
 import com.hizir.sadehome.browser.BrowserActivity
 import com.hizir.sadehome.data.AppEntry
 import com.hizir.sadehome.data.AppRepository
@@ -31,11 +33,11 @@ import com.hizir.sadehome.data.Memory
 import com.hizir.sadehome.data.Prefs
 import com.hizir.sadehome.data.SpeedTest
 import com.hizir.sadehome.data.Weather
-import com.hizir.sadehome.system.AirPlay
 import com.hizir.sadehome.system.Cleaner
 import com.hizir.sadehome.system.Debloat
 import com.hizir.sadehome.system.HomeControl
 import com.hizir.sadehome.ui.AppTile
+import com.hizir.sadehome.ui.FrameStats
 import com.hizir.sadehome.ui.Fonts
 import com.hizir.sadehome.ui.Glyph
 import com.hizir.sadehome.ui.GlyphDrawable
@@ -75,10 +77,11 @@ class LauncherActivity : Activity() {
     private lateinit var weatherGroup: LinearLayout
     private lateinit var airPlayPill: Pill
     private lateinit var ramText: TextView
-    private lateinit var ramDot: View
+    private val ramDot = com.hizir.sadehome.ui.oval(Palette.GOOD)
+    private var lastRam = -1
 
     // Hero
-    private lateinit var accentBar: View
+    private val accentBar = roundRect(Palette.ROSE, 0f)
     private lateinit var greeting: TextView
     private lateinit var heroTitle: TextView
     private lateinit var heroSubtitle: TextView
@@ -90,13 +93,19 @@ class LauncherActivity : Activity() {
     private var all: List<AppEntry> = emptyList()
     private var apps: List<AppEntry> = emptyList()
     private var current: AppEntry? = null
-    private var airPlay: AppEntry? = null
+    /** Son kullanılan uygulama ("Kaldığın yerden devam et"); liste değişince bir kez hesaplanır. */
+    private var mostRecent: AppEntry? = null
+    private var frameStats: FrameStats? = null
     private var resumed = false
-    private var ramTicks = 0
     private var speedTest: SpeedTest? = null
 
     private val adbListener: () -> Unit = {
         if (panel.isOpen && panel.tag == "adb") showAdbSetup(null)
+    }
+
+    private val airPlayListener: () -> Unit = {
+        updateAirPlayChip()
+        if (panel.isOpen && panel.tag == "airplay") showAirPlay()
     }
 
     // ---------------------------------------------------------------- yaşam döngüsü
@@ -106,6 +115,13 @@ class LauncherActivity : Activity() {
         prefs = Prefs.of(this)
         buildUi()
         setContentView(root)
+        // Arka plan görünümü her pikseli opak çiziyor: pencere ve kök dolgusu fazladan iki tam ekran
+        // boyama demekti (zayıf GPU'da her karede ~4 milyon piksel boşa).
+        window.setBackgroundDrawable(null)
+        AirPlayService.start(this)
+        AirPlayState.addListener(airPlayListener)
+        updateAirPlayChip()
+        if (prefs.perfOverlay) frameStats = FrameStats.attach(this, root)
         val pkgFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -123,6 +139,8 @@ class LauncherActivity : Activity() {
         super.onDestroy()
         runCatching { unregisterReceiver(packageReceiver) }
         Adb.removeListener(adbListener)
+        AirPlayState.removeListener(airPlayListener)
+        frameStats?.detach()
         speedTest?.cancel()
     }
 
@@ -180,7 +198,6 @@ class LauncherActivity : Activity() {
     private val ramTick = object : Runnable {
         override fun run() {
             updateRam()
-            if (ramTicks++ % 3 == 0) updateAirPlayState()
             if (resumed) Bg.main.postDelayed(this, 4000)
         }
     }
@@ -188,10 +205,7 @@ class LauncherActivity : Activity() {
     // ---------------------------------------------------------------- arayüz
 
     private fun buildUi() {
-        root = FrameLayout(this).apply {
-            clipChildren = false
-            setBackgroundColor(Palette.BG)
-        }
+        root = FrameLayout(this).apply { clipChildren = false }
         backdrop = HeroBackdrop(this)
         root.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
 
@@ -252,10 +266,7 @@ class LauncherActivity : Activity() {
 
         bar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
 
-        airPlayPill = Pill(this, Glyph.CAST, "AirPlay").apply {
-            setOnClickListener { airPlay?.let { launch(it, this) } ?: openAirPlayStore() }
-            setOnLongClickListener { airPlay?.let { showAppMenu(it) }; true }
-        }
+        airPlayPill = Pill(this, Glyph.CAST, "AirPlay").apply { setOnClickListener { showAirPlay() } }
         bar.addView(airPlayPill, lp(WRAP, MATCH).margins(r = dp(10)))
 
         val speed = Pill(this, Glyph.GAUGE, "Hız testi").apply { setOnClickListener { showSpeedTest() } }
@@ -269,10 +280,10 @@ class LauncherActivity : Activity() {
             clipChildren = false
         }
         ram.addView(ImageView(this).apply { setImageDrawable(GlyphDrawable(Glyph.CHIP, Palette.TEXT_DIM)) }, lp(dp(15), dp(15)))
-        ramText = text("%--", 13f, Palette.TEXT, Fonts.bold)
-        ram.addView(ramText, lp(WRAP, WRAP).margins(l = dp(6)))
-        ramDot = View(this).apply { background = com.hizir.sadehome.ui.oval(Palette.GOOD) }
-        ram.addView(ramDot, lp(dp(7), dp(7)).margins(l = dp(7), r = dp(12)))
+        // Sabit genişlik: değer değişince sadece bu metin yeniden çizilir, tüm ekran yeniden yerleşmez.
+        ramText = text("%--", 13f, Palette.TEXT, Fonts.bold).apply { gravity = Gravity.CENTER }
+        ram.addView(ramText, lp(dp(34), WRAP).margins(l = dp(4)))
+        ram.addView(View(this).apply { background = ramDot }, lp(dp(7), dp(7)).margins(l = dp(3), r = dp(12)))
         bar.addView(ram, lp(WRAP, MATCH).margins(r = dp(10)))
 
         val settings = Pill(this, Glyph.GEAR, null).apply { setOnClickListener { showSettings() } }
@@ -283,8 +294,8 @@ class LauncherActivity : Activity() {
     private fun buildHero(): View {
         val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
         val greetRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        accentBar = View(this).apply { background = roundRect(Palette.ROSE, dp(1f)) }
-        greetRow.addView(accentBar, lp(dp(14), dp(2)).margins(r = dp(8)))
+        accentBar.cornerRadius = dp(1f)
+        greetRow.addView(View(this).apply { background = accentBar }, lp(dp(14), dp(2)).margins(r = dp(8)))
         greeting = text("", 13f, Palette.TEXT_DIM, Fonts.medium)
         greetRow.addView(greeting)
         hero.addView(greetRow)
@@ -324,7 +335,10 @@ class LauncherActivity : Activity() {
             Bg.ui {
                 if (isDestroyed) return@ui
                 if (changed && prefs.sort == Prefs.Sort.RECENT && !appsRow.hasFocus()) showApps(all, null)
-                else current?.let { updateHero(it) }
+                else {
+                    if (changed) mostRecent = apps.filter { it.pkg != packageName }.maxByOrNull { it.lastUsed }?.takeIf { it.lastUsed > 0 }
+                    current?.let { updateHero(it) }
+                }
             }
         }
     }
@@ -332,8 +346,7 @@ class LauncherActivity : Activity() {
     private fun showApps(list: List<AppEntry>, focusPkg: String?) {
         all = list
         apps = AppRepository.arrange(this, list)
-        airPlay = AirPlay.find(list)
-        if (airPlay == null) airPlayPill.setDot(0)
+        mostRecent = apps.filter { it.pkg != packageName }.maxByOrNull { it.lastUsed }?.takeIf { it.lastUsed > 0 }
         appsCount.text = apps.size.toString()
 
         val hadFocus = appsRow.hasFocus() || root.findFocus() == null
@@ -388,22 +401,32 @@ class LauncherActivity : Activity() {
         }
     }
 
+    /**
+     * Odak her değiştiğinde çalışır: burada bellek ayırma ve yeniden yerleşim (requestLayout) yok.
+     * Başlık ve alt başlığın genişliği sabit olduğu için metin değişimi sadece o satırı yeniden çizer.
+     */
     private fun updateHero(e: AppEntry) {
-        greeting.text = greetingText()
-        accentBar.background = roundRect(e.accent, dp(1f))
+        setIfChanged(greeting, greetingText())
+        accentBar.setColor(e.accent)
         if (heroTitle.text != e.label) {
             heroTitle.text = e.label
             heroTitle.alpha = 0.4f
             heroTitle.translationX = dp(-6f)
-            heroTitle.animate().alpha(1f).translationX(0f).setDuration(200).start()
+            // Gölgeli metnin saydamlık animasyonu donanım katmanında: her karede yeniden çizim yok.
+            heroTitle.animate().alpha(1f).translationX(0f).setDuration(200).withLayer().start()
         }
-        val mostRecent = apps.filter { it.pkg != packageName }.maxByOrNull { it.lastUsed }?.takeIf { it.lastUsed > 0 }
-        heroSubtitle.text = when {
+        val mostRecent = mostRecent
+        setIfChanged(heroSubtitle, when {
             e.pkg == packageName -> "Güncel siteler · kumandayla fare imleci"
             e == mostRecent -> "Kaldığın yerden devam et"
             e.lastUsed > 0 -> "Son açılış: ${relative(e.lastUsed)}"
             else -> AppRepository.categoryLabel(e.category) ?: if (e.isLeanback) "TV uygulaması" else "Uygulama"
-        }
+        })
+    }
+
+    /** Aynı metni yeniden atamak bile TextView'i yeniden ölçtürür; sadece değişince ata. */
+    private fun setIfChanged(v: TextView, value: CharSequence) {
+        if (!android.text.TextUtils.equals(v.text, value)) v.text = value
     }
 
     private fun greetingText(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
@@ -430,7 +453,20 @@ class LauncherActivity : Activity() {
             startActivity(AppRepository.launchIntent(this, e), opts)
         } catch (t: Exception) {
             toast("${e.label} açılamadı")
+            return
         }
+        scheduleSmoothTrim(e.pkg)
+    }
+
+    /**
+     * Akıcı mod: açılan uygulama ayağa kalktıktan sonra (açılışı yavaşlatmamak için 4 sn bekleyip)
+     * arka planda kalan diğer uygulamaları kapatır. RAM ve CPU'nun tamamı öndeki uygulamaya kalır;
+     * YouTube, TV+, Apple TV gibi uygulamalarda bellek baskısından doğan takılmalar azalır.
+     */
+    private fun scheduleSmoothTrim(pkg: String) {
+        if (!prefs.smoothMode || !Adb.isUsable(this)) return
+        val apps = all
+        Bg.main.postDelayed({ Cleaner.run(applicationContext, apps, pkg, done = {}, failed = {}) }, 4000)
     }
 
     private fun start(intent: Intent) {
@@ -445,14 +481,6 @@ class LauncherActivity : Activity() {
         start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", e.pkg, null))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
-    /** Kutuda AirPlay alıcısı yoksa: Play Store'da AirScreen sayfasını aç (kurulumu kullanıcı yapar). */
-    private fun openAirPlayStore() {
-        val id = AirPlay.SUGGESTED
-        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$id")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (market.resolveActivity(packageManager) != null) start(market)
-        else toast("AirPlay için Play Store'dan bir alıcı uygulama kurun (ör. AirScreen)")
-    }
-
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     // ---------------------------------------------------------------- üst çubuk durumu
@@ -466,8 +494,10 @@ class LauncherActivity : Activity() {
 
     private fun updateRam() {
         val p = Memory.usedPercent(this)
+        if (p == lastRam) return
+        lastRam = p
         ramText.text = "%$p"
-        ramDot.background = com.hizir.sadehome.ui.oval(
+        ramDot.setColor(
             when {
                 p < 70 -> Palette.GOOD
                 p < 85 -> Palette.WARN
@@ -476,22 +506,16 @@ class LauncherActivity : Activity() {
         )
     }
 
-    private fun updateAirPlayState() {
-        val ap = airPlay ?: return
-        if (!Adb.isUsable(this)) {
-            airPlayPill.setDot(0)
-            return
-        }
-        if (!Cleaner.SAFE_NAME.matches(ap.pkg)) return
-        Adb.shell(this, "pidof ${ap.pkg}") { out ->
-            airPlayPill.setDot(
-                when {
-                    out == null -> 0
-                    out.isNotBlank() -> Palette.GOOD
-                    else -> 0x66FFFFFF
-                }
-            )
-        }
+    private fun updateAirPlayChip() {
+        val st = AirPlayState
+        airPlayPill.setText(st.client?.let { "AirPlay · $it" } ?: "AirPlay")
+        airPlayPill.setDot(
+            when {
+                !st.running -> 0
+                st.mirroring || st.audio -> Palette.ROSE
+                else -> Palette.GOOD
+            }
+        )
     }
 
     private fun refreshWeather() {
@@ -625,6 +649,11 @@ class LauncherActivity : Activity() {
             ) { showAdbSetup(null) }
             row("TV'yi hızlandır", "Gereksiz ön yüklü uygulamaları kapat", Glyph.BOLT) { showDebloat() }
 
+            header("AirPlay ve akıcılık")
+            row("AirPlay alıcısı", "iPhone, iPad ve Mac'ten ekran yansıtma", Glyph.CAST,
+                value = if (prefs.airPlayEnabled) "Açık" else "Kapalı") { showAirPlay() }
+            row("Akıcılık ayarları", "Akıcı mod, uygulama optimizasyonu, kare göstergesi", Glyph.GAUGE) { showSmoothness() }
+
             header("Hava durumu")
             row("Konum", value = prefs.weatherCity ?: "Otomatik", glyph = Glyph.SUN) { showWeather() }
 
@@ -637,10 +666,6 @@ class LauncherActivity : Activity() {
                 showApps(all, current?.pkg)
                 toast("Sıralama sıfırlandı")
             }
-            row("Bellek boşaltırken AirPlay'e dokunma", value = if (prefs.keepAirPlay) "Açık" else "Kapalı", glyph = Glyph.CAST) {
-                prefs.keepAirPlay = !prefs.keepAirPlay
-                showSettings(focusIndex)
-            }
 
             header("Sistem")
             row("Android ayarları", glyph = Glyph.GEAR) {
@@ -650,6 +675,125 @@ class LauncherActivity : Activity() {
                 panel.close()
                 start(Intent(ctx, BrowserActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
+        }
+    }
+
+    private fun showAirPlay(focusIndex: Int = 0) {
+        val ctx = this
+        val st = AirPlayState
+        val on = prefs.airPlayEnabled
+        panel.show("airplay", focusIndex = focusIndex) {
+            title(
+                "AirPlay",
+                when {
+                    !on -> "Kapalı"
+                    st.mirroring -> "${st.client ?: "Bir cihaz"} ekranını yansıtıyor"
+                    st.audio -> "${st.client ?: "Bir cihaz"} ses çalıyor"
+                    st.running -> "Hazır · \"${AirPlayService.displayName(ctx)}\" olarak görünüyor"
+                    else -> "Başlatılıyor…"
+                },
+            )
+            row("AirPlay alıcısı", if (on) "Açık: TV, Apple cihazlarında görünüyor" else "Kapalı", Glyph.CAST,
+                value = if (on) "Açık" else "Kapalı") {
+                prefs.airPlayEnabled = !on
+                if (prefs.airPlayEnabled) AirPlayService.start(ctx) else AirPlayService.stop(ctx)
+                showAirPlay(0)
+            }
+            if (st.mirroring || st.audio) {
+                row("Bağlantıyı kes", st.client, Glyph.STOP, danger = true) { AirPlayService.instance?.disconnect() }
+            }
+            row("Görünen ad", value = AirPlayService.displayName(ctx), glyph = Glyph.DISPLAY) { askAirPlayName() }
+            paragraph(
+                "iPhone / iPad: Denetim Merkezi → Ekran Yansıtma → \"${AirPlayService.displayName(ctx)}\".\n" +
+                    "Sadece ses: müzik çalarken AirPlay simgesi → TV'yi seç.\n" +
+                    "Mac: menü çubuğundaki Denetim Merkezi → Ekran Yansıtma.\n\n" +
+                    "TV ve Apple cihazı aynı ağda olmalı. Geri tuşu yansıtmayı bitirir."
+            )
+        }
+    }
+
+    private fun askAirPlayName() {
+        val input = EditText(this).apply {
+            setText(AirPlayService.displayName(this@LauncherActivity))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine()
+            setSelectAllOnFocus(true)
+        }
+        val save = {
+            val name = input.text.toString().trim().take(40)
+            prefs.airPlayName = name.ifEmpty { null }
+            if (prefs.airPlayEnabled) AirPlayService.restart(this)
+            showAirPlay(2)
+        }
+        val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("AirPlay'de görünen ad")
+            .setView(FrameLayout(this).apply { setPadding(dp(24), dp(8), dp(24), 0); addView(input) })
+            .setPositiveButton("Kaydet") { _, _ -> save() }
+            .setNegativeButton("Vazgeç", null)
+            .create()
+        input.setOnEditorActionListener { _, _, _ -> dialog.dismiss(); save(); true }
+        dialog.show()
+        input.requestFocus()
+    }
+
+    private fun showSmoothness(focusIndex: Int = 0, progress: String? = null) {
+        val ctx = this
+        val adb = Adb.isUsable(ctx)
+        panel.show("smooth", focusIndex = focusIndex) {
+            title("Akıcılık", "YouTube, TV+, Apple TV ve diğer uygulamaların takılmadan çalışması için")
+            row(
+                "Akıcı mod",
+                "Açtığın uygulamaya tüm RAM'i bırakır: açıldıktan birkaç saniye sonra arka plandakiler kapanır",
+                Glyph.BOLT, value = if (prefs.smoothMode) "Açık" else "Kapalı",
+            ) {
+                if (!adb) { showAdbSetup { showSmoothness(0) }; return@row }
+                prefs.smoothMode = !prefs.smoothMode
+                showSmoothness(0)
+            }
+            row(
+                "Uygulamaları optimize et",
+                progress ?: "Uygulamalar önceden derlenir: daha hızlı açılış, kaydırmada daha az takılma (birkaç dakika)",
+                Glyph.GAUGE,
+            ) {
+                if (!adb) { showAdbSetup { showSmoothness(1) }; return@row }
+                if (optimizing) return@row
+                optimizing = true
+                val pkgs = all.filter { it.pkg != packageName }.map { it.pkg }
+                toast("Optimizasyon başladı; bu sırada TV'yi kullanabilirsin")
+                Debloat.optimize(ctx, pkgs, progress = { i, n ->
+                    if (panel.tag == "smooth") showSmoothness(1, "Optimize ediliyor: $i / $n")
+                }, done = { ok ->
+                    optimizing = false
+                    toast(if (ok == null) "ADB hatası" else "$ok uygulama optimize edildi")
+                    if (panel.tag == "smooth") showSmoothness(1)
+                })
+            }
+            row("TV'yi hızlandır", "Gereksiz ön yüklü uygulamaları kapat, animasyonları hızlandır", Glyph.CHIP) { showDebloat() }
+            row(
+                "Performans göstergesi",
+                "Köşede kare sayısı ve takılma oranı (akıcılığı ölçmek için)",
+                Glyph.DISPLAY, value = if (prefs.perfOverlay) "Açık" else "Kapalı",
+            ) {
+                prefs.perfOverlay = !prefs.perfOverlay
+                frameStats?.detach(); frameStats = null
+                if (prefs.perfOverlay) frameStats = FrameStats.attach(ctx, root)
+                showSmoothness(3)
+            }
+            paragraph(
+                "İpucu: Ayarlar → Ekran ve Ses → Gelişmiş görüntü → \"İçerik kare hızını eşleştir\" açıkken " +
+                    "TV+ ve Apple TV'deki filmler (24 kare/sn) sarsıntısız oynar."
+            )
+        }
+    }
+
+    private var optimizing = false
+
+    /** Başka bir uygulamadayken ana ekranın tuttuğu önbellekler bırakılır; RAM öndeki uygulamaya kalır. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_UI_HIDDEN) {
+            HeroBackdrop.trim()
+            AppRepository.trimHeroCache()
         }
     }
 

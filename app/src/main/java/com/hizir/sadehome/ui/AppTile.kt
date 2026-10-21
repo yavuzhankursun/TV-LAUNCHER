@@ -5,11 +5,9 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
-import android.graphics.Typeface
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
@@ -22,10 +20,8 @@ import com.hizir.sadehome.data.Mark
 @SuppressLint("ViewConstructor")
 class AppTile(context: Context, val entry: AppEntry, bannerMode: Boolean) : LinearLayout(context) {
     val card = AppCardView(context, entry, bannerMode)
-    private val caption = context.text("", 11f, Palette.TEXT_DIM, Fonts.medium).apply {
-        alpha = 0f
-        text = SpannableBold.make(entry.label, "")
-    }
+    // Düz (span'siz) metin: saydamlık animasyonu ekran dışı katman gerektirmez, doğrudan çizilir.
+    private val caption = context.text(entry.label, 11f, Palette.TEXT, Fonts.bold).apply { alpha = 0f }
     private val overshoot = OvershootInterpolator(1.6f)
 
     init {
@@ -58,15 +54,6 @@ class AppTile(context: Context, val entry: AppEntry, bannerMode: Boolean) : Line
     }
 }
 
-private object SpannableBold {
-    fun make(bold: String, rest: String): CharSequence {
-        val s = android.text.SpannableString(bold + rest)
-        s.setSpan(android.text.style.StyleSpan(Typeface.BOLD), 0, bold.length, 0)
-        s.setSpan(android.text.style.ForegroundColorSpan(Palette.TEXT), 0, bold.length, 0)
-        return s
-    }
-}
-
 /**
  * Tek View ile çizilen kart: uygulamanın renginden degrade zemin, sağ üstte ikon, sol altta ad.
  * Banner modunda uygulamanın kendi TV banner'ı tam kaplanır. Seçilince üzerinden ışık geçer.
@@ -79,7 +66,6 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
         }
     private val radius = context.dp(12f)
     private val rect = RectF()
-    private val clip = Path()
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gloss = Paint(Paint.ANTI_ALIAS_FLAG)
     private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -105,6 +91,15 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
     private val markRect = RectF()
     private val src = Rect()
 
+    init {
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, radius)
+            }
+        }
+        clipToOutline = true
+    }
+
     fun shine() {
         val a = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(620)
         a.addUpdateListener { shineT = it.animatedValue as Float; invalidate() }
@@ -119,8 +114,6 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         rect.set(0f, 0f, w.toFloat(), h.toFloat())
-        clip.reset()
-        clip.addRoundRect(rect, radius, radius, Path.Direction.CW)
         val a = entry.accent
         bg.shader = LinearGradient(
             0f, 0f, w.toFloat(), h.toFloat(),
@@ -140,8 +133,8 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
-        canvas.save()
-        canvas.clipPath(clip)
+        // Köşe kırpma görünümün dış hattıyla (clipToOutline) yapılıyor: clipPath'in aksine GPU'da
+        // şablon (stencil) maskesi ya da ara katman gerektirmez.
         val banner = if (bannerMode) entry.banner else null
         if (banner != null) {
             canvas.drawColor(0xFF15151B.toInt())
@@ -168,7 +161,6 @@ class AppCardView(context: Context, private val entry: AppEntry, private val ban
             shinePaint.shader?.setLocalMatrix(shineMatrix)
             canvas.drawRect(rect, shinePaint)
         }
-        canvas.restore()
         val inset = border.strokeWidth / 2
         if (highlighted) {
             canvas.drawRoundRect(inset, inset, w - inset, h - inset, radius, radius, border)

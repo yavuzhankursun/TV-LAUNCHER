@@ -159,7 +159,16 @@ object AppRepository {
             d.foreground.draw(c)
             out
         } else {
-            renderIcon(d, sizePx)
+            // Klasik kare ikonlar yuvarlak köşeli çizilir.
+            val out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val c = Canvas(out)
+            val r = sizePx * 0.22f
+            c.clipPath(android.graphics.Path().apply {
+                addRoundRect(0f, 0f, sizePx.toFloat(), sizePx.toFloat(), r, r, android.graphics.Path.Direction.CW)
+            })
+            d.setBounds(0, 0, sizePx, sizePx)
+            d.draw(c)
+            out
         }
         heroCache.put(entry.pkg, bmp)
         return bmp

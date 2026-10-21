@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sade Ana Ekran</string>
+    <string name="browser_name">Tarayıcı</string>
+    <string name="watcher_label">Sade Ana Ekran – HOME tuşu</string>
+    <string name="watcher_desc">HOME tuşuna basınca Google TV yerine Sade Ana Ekran\'ı açar. Ekran içeriğini okumaz; sadece HOME tuşunu ve öndeki uygulamanın adını görür.</string>
+</resources>

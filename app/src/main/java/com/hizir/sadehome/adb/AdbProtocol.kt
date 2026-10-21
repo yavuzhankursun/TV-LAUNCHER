@@ -179,8 +179,8 @@ class AdbConnection private constructor(private val socket: Socket) : Closeable 
         private val EMPTY = ByteArray(0)
 
         /**
-         * Bağlanır ve kimlik doğrular. Anahtar henüz güvenilir değilse açık anahtarı gönderir,
-         * [onPrompt] çağrılır ve kullanıcı TV'deki pencereyi onaylayana kadar [promptTimeoutMs] bekler.
+         * Bağlanır ve kimlik doğrular. Anahtar henüz güvenilir değilse ve [allowPrompt] açıksa
+         * açık anahtarı gönderir, [onPrompt] çağrılır ve kullanıcı TV'deki pencereyi onaylayana kadar [promptTimeoutMs] bekler.
          */
         fun open(
             host: String,
@@ -188,6 +188,7 @@ class AdbConnection private constructor(private val socket: Socket) : Closeable 
             keys: AdbKeys,
             keyName: String,
             promptTimeoutMs: Int = 60_000,
+            allowPrompt: Boolean = true,
             onPrompt: () -> Unit = {},
         ): AdbConnection {
             val socket = Socket()
@@ -196,7 +197,7 @@ class AdbConnection private constructor(private val socket: Socket) : Closeable 
             socket.soTimeout = 5000
             val conn = AdbConnection(socket)
             try {
-                conn.handshake(keys, keyName, promptTimeoutMs, onPrompt)
+                conn.handshake(keys, keyName, promptTimeoutMs, allowPrompt, onPrompt)
             } catch (t: Throwable) {
                 conn.close()
                 throw t
@@ -205,7 +206,7 @@ class AdbConnection private constructor(private val socket: Socket) : Closeable 
         }
     }
 
-    private fun handshake(keys: AdbKeys, keyName: String, promptTimeoutMs: Int, onPrompt: () -> Unit) {
+    private fun handshake(keys: AdbKeys, keyName: String, promptTimeoutMs: Int, allowPrompt: Boolean, onPrompt: () -> Unit) {
         send(A_CNXN, VERSION, MAX_PAYLOAD, "host::\u0000".toByteArray(Charsets.UTF_8))
         var sentSignature = false
         var sentKey = false
@@ -228,6 +229,7 @@ class AdbConnection private constructor(private val socket: Socket) : Closeable 
                             sentSignature = true
                             send(A_AUTH, AUTH_SIGNATURE, 0, keys.sign(m.data))
                         }
+                        !allowPrompt -> throw AdbAuthException("Anahtar henüz onaylanmamış")
                         !sentKey -> {
                             sentKey = true
                             send(A_AUTH, AUTH_RSAPUBLICKEY, 0, keys.adbPublicKey(keyName) + 0.toByte())

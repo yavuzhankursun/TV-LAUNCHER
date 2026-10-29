@@ -1,135 +1,137 @@
 <div align="center">
 
-# Sade Ana Ekran
+# Sade Home
 
-**Xiaomi Mi Box S için hafif, sinematik ve Apple TV hissi veren bir ana ekran.**
-Google TV'nin ağır arayüzünün yerine geçer; istediğin an tek tıkla eski arayüze dönersin.
+**A lightweight, cinematic, Apple TV-like home screen for the Xiaomi Mi Box S.**
+Replaces Google TV's heavy launcher; switch back to the stock UI with one click whenever you want.
+
+**English** | [Türkçe](README.tr.md)
 
 ![Android TV 14](https://img.shields.io/badge/Android%20TV-14-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)
-![Bağımlılık yok](https://img.shields.io/badge/ba%C4%9F%C4%B1ml%C4%B1l%C4%B1k-yok-555)
+![No dependencies](https://img.shields.io/badge/dependencies-none-555)
 ![APK](https://img.shields.io/badge/APK-~250%20KB-555)
 
-<img src="docs/ekran/ana-ekran-2.jpg" alt="Ana ekran" width="860">
+<img src="docs/ekran/ana-ekran-2.jpg" alt="Home screen" width="860">
 
 </div>
 
 ---
 
-## Öne çıkanlar
+## Highlights
 
-- **Sinematik ana ekran:** Seçili uygulamanın renginde tam ekran arka plan ve büyük, keskin logo. Kartlar yaylanarak büyür, üzerlerinden ışık geçer.
-- **Sade simgeler:** Marka simgeleri ([Simple Icons](https://simpleicons.org), CC0) ve resmi marka renkleri. Simgesi olmayan uygulamalar için logodan beyaz silüet üretilir.
-- **Yerleşik AirPlay:** iPhone, iPad ve Mac'ten ekran yansıtma ve ses. Ek uygulama gerekmez. Yeni bir cihaz bağlanmadan önce TV'de **izin sorulur**.
-- **Akıcı mod:** Açtığın uygulamaya RAM'i bırakır, arka plandakileri kapatır. Korumak istediğin uygulamaları seçebilirsin.
-- **Üst çubuk:** Saat, tarih, hava durumu, RAM göstergesi, AirPlay durumu ve hız testi.
-- **Tarayıcı:** Google TV'de olmayan bir internet tarayıcısı; kumandanın yön tuşları fare imleci olur.
-- **Hafif:** androidx, Compose ya da üçüncü parti kütüphane yok. Ana ekranın kendisi ~50-60 MB RAM kullanır; Google TV ana ekranı ~140 MB kullanıyor.
+- **Cinematic home screen:** a full-screen backdrop in the selected app's brand color and a large, crisp logo. Cards spring up on focus with a light sweep across them.
+- **Clean icons:** brand marks from [Simple Icons](https://simpleicons.org) (CC0) with official brand colors. Apps without a mark get a white silhouette generated from their logo.
+- **Built-in AirPlay:** screen mirroring and audio from iPhone, iPad and Mac. No extra app needed. The TV **asks for permission** before a new device connects.
+- **Smooth mode:** hands RAM to the app you open and closes the ones in the background. You choose which apps to protect.
+- **Top bar:** clock, date, weather, RAM meter, AirPlay status and a speed test.
+- **Browser:** a web browser Google TV lacks; the remote's arrow keys drive a mouse cursor.
+- **Lightweight:** no androidx, no Compose, no third-party libraries. The launcher itself uses ~50–60 MB of RAM, versus ~140 MB for the Google TV home screen.
 
-## Ekran görüntüleri
+## Screenshots
 
 | | |
 |:-:|:-:|
-| <img src="docs/ekran/ana-ekran.jpg" alt="Ana ekran, TV+ seçili" width="420"> | <img src="docs/ekran/uygulama-menusu.jpg" alt="Uzun basma menüsü" width="420"> |
-| Ana ekran | Uzun basma menüsü |
-| <img src="docs/ekran/airplay.jpg" alt="AirPlay paneli" width="420"> | <img src="docs/ekran/ayarlar.jpg" alt="Ayarlar paneli" width="420"> |
-| AirPlay | Ayarlar |
+| <img src="docs/ekran/ana-ekran.jpg" alt="Home screen with TV+ selected" width="420"> | <img src="docs/ekran/uygulama-menusu.jpg" alt="Long-press menu" width="420"> |
+| Home screen | Long-press menu |
+| <img src="docs/ekran/airplay.jpg" alt="AirPlay panel" width="420"> | <img src="docs/ekran/ayarlar.jpg" alt="Settings panel" width="420"> |
+| AirPlay | Settings |
 
 ---
 
-## Kurulum
+## Installation
 
-**Gerekenler:** JDK 17+, Android SDK (platform 35), `adb`. Kutu ve bilgisayar aynı ağda olmalı.
+**Requirements:** JDK 17+, Android SDK (platform 35), `adb`. The box and your computer must be on the same network.
 
-1. **Kutuda geliştirici modunu aç:** Ayarlar → Sistem → Hakkında → *Android TV OS derlemesi*'ne 7 kez bas. Sonra Geliştirici seçenekleri → **USB hata ayıklama: Açık**.
-2. **Derle ve yükle:**
+1. **Enable developer mode on the box:** Settings → System → About → tap *Android TV OS build* 7 times. Then Developer options → **USB debugging: On**.
+2. **Build and install:**
    ```bash
    ./gradlew assembleRelease
-   adb connect <KUTU_IP>:5555
+   adb connect <BOX_IP>:5555
    adb install -r app/build/outputs/apk/release/app-release.apk
    ```
-3. **İlk açılış:** Google TV → Uygulamalar → **Sade Ana Ekran** → ⚙ → **ADB → Bağlan**. TV'de çıkan pencerede *"Her zaman izin ver"*i işaretleyip onayla.
+3. **First launch:** Google TV → Apps → **Sade Home** → ⚙ → **ADB → Connect**. In the dialog that appears on the TV, tick *"Always allow"* and confirm.
 
-Bu kadar. Uygulama HOME yönlendirmesini ve gerekli izinleri kendisi ayarlar.
+That is all. The app sets up the HOME redirect and the permissions it needs by itself.
 
-> `local.properties` dosyasında `sdk.dir=/Android/sdk/yolu` olmalı. Android Studio bu dosyayı kendisi oluşturur.
+> `local.properties` must contain `sdk.dir=/path/to/Android/sdk`. Android Studio creates this file for you.
 
-## Kullanım
+## Usage
 
-| Kumanda | Ne olur |
+| Remote | What happens |
 |---|---|
-| ◀ ▶ | Uygulamalar arasında gez |
-| ▲ ▼ | Üst çubuk ↔ uygulamalar |
-| OK | Aç |
-| OK'e basılı tut / Menü | Taşı, gizle, zorla durdur, Akıcı modda koru, kaldır |
-| Geri | Paneli kapatır |
-| HOME | Her yerden bu ana ekrana döner |
+| ◀ ▶ | Move between apps |
+| ▲ ▼ | Top bar ↔ apps |
+| OK | Open |
+| Hold OK / Menu | Move, hide, force stop, protect in Smooth mode, uninstall |
+| Back | Closes the panel |
+| HOME | Returns to this home screen from anywhere |
 
-**Eski arayüze dönmek:** ⚙ → *Google TV arayüzüne dön*. Tekrar gelmek için Google TV → Uygulamalar → Sade Ana Ekran → ⚙ → *Bu ana ekranı kullan*.
+**Going back to the stock UI:** ⚙ → *Return to the Google TV launcher*. To come back: Google TV → Apps → Sade Home → ⚙ → *Use this home screen*.
 
 ## AirPlay
 
-- **Ekran yansıtma:** iPhone/iPad'de Denetim Merkezi → **Ekran Yansıtma** → *"(TV'nin adı) AirPlay"*. Mac'te ise menü çubuğu → Denetim Merkezi → Ekran Yansıtma.
-- **Sadece ses:** Müzik çalarken AirPlay simgesi → TV.
-- **İzin:** Yeni bir cihaz bağlanınca TV'de **Reddet / Bu sefer izin ver / Her zaman izin ver** sorulur. 30 saniye içinde cevap verilmezse istek reddedilir. Hatırlanan cihazları ⚙ → AirPlay'den silebilirsin.
-- **Bitirmek:** iPhone'da *Yansıtmayı Durdur* ya da TV'de **Geri** tuşu.
+- **Screen mirroring:** on iPhone/iPad, Control Center → **Screen Mirroring** → *"(TV name) AirPlay"*. On a Mac: menu bar → Control Center → Screen Mirroring.
+- **Audio only:** while music is playing, AirPlay icon → TV.
+- **Permission:** when a new device connects, the TV asks **Deny / Allow once / Always allow**. If there is no answer within 30 seconds, the request is denied. Remembered devices can be removed under ⚙ → AirPlay.
+- **Ending a session:** *Stop Mirroring* on the iPhone, or the **Back** key on the TV.
 
-## Akıcılık
+## Smoothness
 
-**Akıcı mod** (⚙ → Akıcılık, varsayılan olarak açık): Bir uygulamayı açtıktan ~4 saniye sonra arka planda kalanları kapatır. Kapatılmasını istemediğin uygulamaya uzun basıp **Akıcı modda koru**'yu seç; Play Store varsayılan olarak korunur.
+**Smooth mode** (⚙ → Smoothness, on by default): about 4 seconds after you open an app, it closes whatever is left in the background. Long-press an app you want to keep and choose **Protect in Smooth mode**; the Play Store is protected by default.
 
-Mi Box S üzerinde ölçülen değerler:
+Measured on a Mi Box S:
 
-| | Sonuç |
+| | Result |
 |---|---|
-| Ana ekranda gezinme | kare düşmesi **~%1** |
-| Netflix (arka planda 3 uygulama açıkken) | kaçırılan kare **%52 → %5** (Akıcı mod ile) |
+| Navigating the home screen | **~1%** dropped frames |
+| Netflix (with 3 apps open in the background) | missed frames **52% → 5%** (with Smooth mode) |
 
-İpucu: Ayarlar → Ekran ve Ses → Gelişmiş görüntü → **İçerik kare hızını eşleştir** açıkken filmler (24 kare/sn) sarsıntısız oynar.
+Tip: with Settings → Display & Sound → Advanced display → **Match content frame rate** enabled, films (24 fps) play without judder.
 
 <details>
-<summary><b>TV'yi hızlandır</b>: gereksiz ön yüklü uygulamaları kapat</summary>
+<summary><b>Speed up the TV</b>: disable unnecessary preinstalled apps</summary>
 
-⚙ → Akıcılık → **TV'yi hızlandır**. Uygulamalar **silinmez**; `pm disable-user` ile kapatılır ve tek tıkla (ya da *Hepsini geri aç* ile) geri açılır.
+⚙ → Smoothness → **Speed up the TV**. Apps are **not deleted**; they are disabled with `pm disable-user` and can be re-enabled with one click (or with *Re-enable all*).
 
-| Önerilen | Kullanmıyorsan |
+| Recommended | If you do not use them |
 |---|---|
-| Xiaomi Galeri, Xiaomi Media Player | YouTube Kids, YouTube Music |
-| Google Geri Bildirim, Play Oyunlar | Miracast |
-| Yazdırma hizmeti, eski ekran koruyucular | Ambient mod |
-| TalkBack | Google TV öneri şeritleri |
+| Xiaomi Gallery, Xiaomi Media Player | YouTube Kids, YouTube Music |
+| Google Feedback, Play Games | Miracast |
+| Print service, legacy screensavers | Ambient mode |
+| TalkBack | Google TV recommendation rows |
 
-**Asla dokunulmayanlar:** yayın uygulamaları, Play Store, Google Play Hizmetleri, sesli arama, Chromecast, klavye, kumanda servisi ve Google TV ana ekranı.
+**Never touched:** streaming apps, Play Store, Google Play Services, voice search, Chromecast, keyboard, the remote-control service and the Google TV home screen.
 </details>
 
 <details>
-<summary><b>Sorun giderme</b></summary>
+<summary><b>Troubleshooting</b></summary>
 
-| Sorun | Çözüm |
+| Problem | Fix |
 |---|---|
-| HOME tuşu Google TV'ye gidiyor | ⚙ → *HOME tuşu yönlendirmesi*. Uygulama "Zorla durdur" yapılırsa Android bu servisi kapatır. Güncellemeden hemen sonra basılan ilk HOME da kaçabilir. |
-| iPhone'da TV görünmüyor | TV ile telefon aynı Wi‑Fi'da mı? ⚙ → AirPlay açık mı (çipteki nokta yeşil olmalı)? Misafir ağlarında ya da "istemci yalıtımı" açık modemlerde görünmez. |
-| Akıcı mod çalışmıyor | ⚙ → ADB → *Bağlı* olmalı. Kutu yeniden başlayınca ADB portu kapanabilir: `adb connect <KUTU_IP>:5555` ve ardından `adb tcpip 5555`. |
-| Hava durumu yok | İnternet yoksa gizlenir. ⚙ → Hava durumu → şehri elle seç. |
-| Yansıtmada görüntü gelmiyor | `adb logcat -s SadeAirPlay` çıktısına bak. |
+| HOME key goes to Google TV | ⚙ → *HOME key redirect*. If the app is "force stopped", Android disables this service. The first HOME press right after an update may also slip through. |
+| TV not visible on the iPhone | Are the TV and the phone on the same Wi‑Fi? Is ⚙ → AirPlay on (the dot on the chip should be green)? It will not show up on guest networks or on routers with "client isolation" enabled. |
+| Smooth mode not working | ⚙ → ADB must show *Connected*. The ADB port may close after the box reboots: `adb connect <BOX_IP>:5555`, then `adb tcpip 5555`. |
+| No weather | Hidden when there is no internet. ⚙ → Weather → pick the city manually. |
+| No picture while mirroring | Check the output of `adb logcat -s SadeAirPlay`. |
 
-**Tamamen kaldırmak:** `adb uninstall com.hizir.sadehome`. HOME yönlendirmesi ve izinler kendiliğinden sıfırlanır. "TV'yi hızlandır" ile kapattıkların ise kapalı kalır; kaldırmadan önce *Hepsini geri aç*'a bas.
+**Uninstalling completely:** `adb uninstall com.hizir.sadehome`. The HOME redirect and permissions reset on their own. Apps disabled with "Speed up the TV" stay disabled, so press *Re-enable all* before uninstalling.
 </details>
 
 <details>
-<summary><b>Proje yapısı</b></summary>
+<summary><b>Project structure</b></summary>
 
 ```
 app/src/main/java/com/hizir/sadehome/
-├── LauncherActivity.kt      Ana ekran: düzen, odak, paneller
-├── HomeActivity.kt          HOME'un görünmez yönlendiricisi (yeni / Google TV)
-├── HomeWatcherService.kt    Erişilebilirlik servisi: Google TV'nin HOME kilidini aşar
-├── adb/                     Bağımlılıksız ADB istemcisi (kendi kutusuna bağlanır)
-├── airplay/                 Yerleşik AirPlay alıcısı: RTSP, eşleştirme, FairPlay, H.264, AAC/ALAC, izin penceresi
-├── browser/                 Tarayıcı (WebView + kumanda imleci)
-├── data/                    Uygulama listesi, sade simgeler (Marks), ayarlar, hava durumu, hız testi
-├── system/                  Akıcı mod, TV'yi hızlandır, HOME kontrolü
-└── ui/                      Kart, kaydırmalı satır, arka plan, yan panel, çizilmiş ikonlar
+├── LauncherActivity.kt      Home screen: layout, focus, panels
+├── HomeActivity.kt          Invisible HOME router (new launcher / Google TV)
+├── HomeWatcherService.kt    Accessibility service: bypasses Google TV's HOME lock
+├── adb/                     Dependency-free ADB client (connects to its own box)
+├── airplay/                 Built-in AirPlay receiver: RTSP, pairing, FairPlay, H.264, AAC/ALAC, permission dialog
+├── browser/                 Browser (WebView + remote-driven cursor)
+├── data/                    App list, clean icons (Marks), settings, weather, speed test
+├── system/                  Smooth mode, Speed up the TV, HOME control
+└── ui/                      Card, scrolling row, backdrop, side panel, drawn icons
 ```
 
 Kotlin 2.0.21 · AGP 8.7.3 · Gradle 8.11.1 · minSdk 26 · targetSdk 34.
@@ -137,10 +139,10 @@ Kotlin 2.0.21 · AGP 8.7.3 · Gradle 8.11.1 · minSdk 26 · targetSdk 34.
 
 ---
 
-## Lisans ve teşekkür
+## License and credits
 
-- `airplay/FairPlay.kt`, [UxPlay](https://github.com/FDH2/UxPlay)'deki *playfair* kodunun Kotlin portudur ve **GPL-3.0** lisanslıdır. AirPlay protokol akışı da UxPlay referans alınarak yazıldı. Bu yüzden uygulama dağıtılacaksa kaynak kodu GPL-3.0 ile paylaşılmalıdır.
-- Marka simgeleri [Simple Icons](https://simpleicons.org)'tan (CC0) alındı; logolar sahiplerine aittir.
-- Kişisel kullanım için geliştirildi. Google, Xiaomi ya da Apple ile bir bağı yoktur.
+- `airplay/FairPlay.kt` is a Kotlin port of the *playfair* code in [UxPlay](https://github.com/FDH2/UxPlay) and is licensed under **GPL-3.0**. The AirPlay protocol flow was also written with UxPlay as the reference. If the app is distributed, its source code must therefore be shared under GPL-3.0.
+- Brand marks come from [Simple Icons](https://simpleicons.org) (CC0); logos belong to their owners.
+- Built for personal use. Not affiliated with Google, Xiaomi or Apple.
 
-<div align="center"><sub>Geliştiren: <b>Yavuzhan Kurşun</b></sub></div>
+<div align="center"><sub>Built by <b>Yavuzhan Kurşun</b></sub></div>
